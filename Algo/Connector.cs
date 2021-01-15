@@ -49,6 +49,7 @@ namespace StockSharp.Algo
 		// backward compatibility for NewXXX events
 		private readonly CachedSynchronizedSet<Security> _existingSecurities = new CachedSynchronizedSet<Security>();
 		private readonly CachedSynchronizedSet<Portfolio> _existingPortfolios = new CachedSynchronizedSet<Portfolio>();
+		private readonly CachedSynchronizedSet<Position> _existingPositions = new CachedSynchronizedSet<Position>();
 
 		private bool _notFirstTimeConnected;
 		private bool _isDisposing;
@@ -275,11 +276,6 @@ namespace StockSharp.Algo
 
 		IEnumerable<Security> ISecurityProvider.Lookup(SecurityLookupMessage criteria) => SecurityStorage.Lookup(criteria);
 
-		private DateTimeOffset _currentTime;
-
-		/// <inheritdoc />
-		public override DateTimeOffset CurrentTime => _currentTime;
-
 		/// <inheritdoc />
 		public SessionStates? GetSessionState(ExchangeBoard board) => _entityCache.GetSessionState(board);
 
@@ -315,7 +311,7 @@ namespace StockSharp.Algo
 		public IEnumerable<Portfolio> Portfolios => _existingPortfolios.Cache;
 
 		/// <inheritdoc />
-		public IEnumerable<Position> Positions => PositionStorage.Positions;
+		public IEnumerable<Position> Positions => _existingPositions.Cache;
 
 		/// <summary>
 		/// Risk control manager.
@@ -448,7 +444,7 @@ namespace StockSharp.Algo
 		}
 
 		/// <summary>
-		/// Increment periodically <see cref="MarketTimeChangedInterval"/> value of <see cref="CurrentTime"/>.
+		/// Increment periodically <see cref="MarketTimeChangedInterval"/> value of <see cref="ILogSource.CurrentTime"/>.
 		/// </summary>
 		public bool TimeChange { get; set; } = true;
 
@@ -542,12 +538,12 @@ namespace StockSharp.Algo
 		}
 
 		/// <inheritdoc />
-		public Position GetPosition(Portfolio portfolio, Security security, string strategyId = "", string clientCode = "", string depoName = "", TPlusLimits? limitType = null)
+		public Position GetPosition(Portfolio portfolio, Security security, string strategyId = "", Sides? side = null, string clientCode = "", string depoName = "", TPlusLimits? limitType = null)
 		{
-			return GetPosition(portfolio, security, strategyId, clientCode, depoName, limitType, string.Empty);
+			return GetPosition(portfolio, security, strategyId, side, clientCode, depoName, limitType, string.Empty);
 		}
 
-		private Position GetPosition(Portfolio portfolio, Security security, string strategyId, string clientCode, string depoName, TPlusLimits? limitType, string description)
+		private Position GetPosition(Portfolio portfolio, Security security, string strategyId, Sides? side, string clientCode, string depoName, TPlusLimits? limitType, string description)
 		{
 			if (portfolio == null)
 				throw new ArgumentNullException(nameof(portfolio));
@@ -555,7 +551,7 @@ namespace StockSharp.Algo
 			if (security == null)
 				throw new ArgumentNullException(nameof(security));
 
-			var position = PositionStorage.GetOrCreatePosition(portfolio, security, strategyId, clientCode, depoName, limitType, (pf, sec, sid, clCode, ddep, limit) =>
+			var position = PositionStorage.GetOrCreatePosition(portfolio, security, strategyId, side, clientCode, depoName, limitType, (pf, sec, sid, sd, clCode, ddep, limit) =>
 			{
 				var p = EntityFactory.CreatePosition(portfolio, security);
 
@@ -564,11 +560,12 @@ namespace StockSharp.Algo
 				p.Description = description;
 				p.ClientCode = clientCode;
 				p.StrategyId = strategyId;
+				p.Side = side;
 
 				return p;
-			}, out var isNew);
+			}, out _);
 
-			if (isNew)
+			if (_existingPositions.TryAdd(position))
 				RaiseNewPosition(position);
 
 			return position;
@@ -589,6 +586,7 @@ namespace StockSharp.Algo
 			return depth;
 		}
 
+		[Obsolete]
 		private MarketDepth GetMarketDepth(Security security, bool isFiltered)
 		{
 			return GetMarketDepth(security, new QuoteChangeMessage
@@ -971,25 +969,7 @@ namespace StockSharp.Algo
 		/// <param name="transactionId">Order cancellation transaction id.</param>
 		protected void OnCancelOrder(Order order, long transactionId)
 		{
-			decimal? volume;
-
-			switch (TransactionAdapter?.OrderCancelVolumeRequired)
-			{
-				case null:
-					volume = null;
-					break;
-				case OrderCancelVolumeRequireTypes.Balance:
-					volume = order.Balance;
-					break;
-				case OrderCancelVolumeRequireTypes.Volume:
-					volume = order.Volume;
-					break;
-				default:
-					throw new ArgumentOutOfRangeException();
-			}
-
-			var cancelMsg = order.CreateCancelMessage(GetSecurityId(order.Security), transactionId, volume);
-			SendInMessage(cancelMsg);
+			SendInMessage(order.CreateCancelMessage(GetSecurityId(order.Security), transactionId));
 		}
 
 		/// <inheritdoc />
@@ -1072,32 +1052,26 @@ namespace StockSharp.Algo
 					_isMarketTimeHandled = true;	
 			}
 
-			// output messages from adapters goes non ordered
-			if (_currentTime > message.LocalTime)
-				return;
+			var currentTime = message.LocalTime;
 
-			_currentTime = message.LocalTime;
-
-			if (_prevTime.IsDefault())
+			if (_prevTime == default)
 			{
-				_prevTime = _currentTime;
+				_prevTime = currentTime;
 				return;
 			}
 
-			var diff = _currentTime - _prevTime;
+			var diff = currentTime - _prevTime;
 
-			if (diff >= MarketTimeChangedInterval)
-			{
-				_prevTime = _currentTime;
-				RaiseMarketTimeChanged(diff);
-			}
+			if (diff < MarketTimeChangedInterval)
+				return;
+
+			_prevTime = currentTime;
+			RaiseMarketTimeChanged(diff);
 		}
 
 		/// <inheritdoc />
 		public Security GetSecurity(SecurityId securityId)
-		{
-			return GetSecurity(securityId, s => false, out _);
-		}
+			=> GetSecurity(securityId, s => false, out _);
 
 		private Security TryGetSecurity(SecurityId? securityId)
 			=> securityId == null || securityId.Value == default ? null : GetSecurity(securityId.Value);
@@ -1124,7 +1098,7 @@ namespace StockSharp.Algo
 			var security = TryGetSecurity(secId);
 
 			if (security == null)
-				throw new ArgumentOutOfRangeException(nameof(message), message, LocalizedStrings.Str704Params.Put());
+				throw new ArgumentOutOfRangeException(nameof(message), message, LocalizedStrings.Str704Params.Put(secId));
 
 			return security;
 		}
@@ -1218,11 +1192,11 @@ namespace StockSharp.Algo
 
 			_existingSecurities.Clear();
 			_existingPortfolios.Clear();
+			_existingPositions.Clear();
 
 			_notFirstTimeConnected = default;
 
 			_prevTime = default;
-			_currentTime = default;
 
 			ConnectionState = ConnectionStates.Disconnected;
 

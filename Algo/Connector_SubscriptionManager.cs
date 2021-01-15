@@ -20,14 +20,12 @@ namespace StockSharp.Algo
 		private class SubscriptionInfo
 		{
 			private DateTimeOffset? _last;
+			private Candle _currentCandle;
 
 			public SubscriptionInfo(Subscription subscription, SubscriptionInfo parent)
 			{
 				Subscription = subscription ?? throw new ArgumentNullException(nameof(subscription));
 				Parent = parent;
-
-				if (Subscription.CandleSeries != null)
-					Holder = new CandlesSeriesHolder(subscription.CandleSeries);
 
 				_last = subscription.SubscriptionMessage.From;
 
@@ -46,7 +44,9 @@ namespace StockSharp.Algo
 			public Subscription Subscription { get; }
 			public bool HasResult { get; set; }
 			public List<object> LookupItems { get; }
-			public CandlesSeriesHolder Holder { get; }
+
+			public Security Security { get; set; }
+			public bool SecurityNotFound { get; set; }
 
 			public ISubscriptionMessage CreateSubscriptionContinue()
 			{
@@ -67,6 +67,27 @@ namespace StockSharp.Algo
 				}
 
 				return false;
+			}
+
+			public bool UpdateCandle(CandleMessage message, out Candle candle)
+			{
+				if (message == null)
+					throw new ArgumentNullException(nameof(message));
+
+				candle = null;
+
+				if (_currentCandle != null && _currentCandle.OpenTime == message.OpenTime)
+				{
+					if (_currentCandle.State == CandleStates.Finished)
+						return false;
+
+					_currentCandle.Update(message);
+				}
+				else
+					_currentCandle = message.ToCandle(Security);
+
+				candle = _currentCandle;
+				return true;
 			}
 
 			public override string ToString() => Subscription.ToString();
@@ -136,7 +157,7 @@ namespace StockSharp.Algo
 			{
 				// keed subscription instancies for tracing purpose
 				//_subscriptions.Remove(id);
-				_connector.AddInfoLog("Subscription {0} removed.", id);
+				_connector.AddInfoLog(LocalizedStrings.SubscriptionRemoved, id);
 			}
 
 			private SubscriptionInfo TryGetInfo(long id, bool ignoreAll, bool remove, DateTimeOffset? time, bool addLog)
@@ -161,7 +182,9 @@ namespace StockSharp.Algo
 						else if (time != null)
 						{
 							if (!info.UpdateLastTime(time.Value))
-								return null;
+							{
+								//return null;
+							}
 						}
 
 						return info;
@@ -540,15 +563,29 @@ namespace StockSharp.Algo
 							TryWriteLog(subscriptionId);
 							continue;
 						}
-					}
 
-					if (info.Holder == null)
-						continue;
+						if (info.Security == null)
+						{
+							if (info.SecurityNotFound)
+								continue;
+
+							var security = _connector.TryGetSecurity(info.Subscription.SecurityId);
+
+							if (security == null)
+							{
+								info.SecurityNotFound = true;
+								_connector.AddWarningLog(LocalizedStrings.Str704Params.Put(info.Subscription.SecurityId));
+								continue;
+							}
+
+							info.Security = security;
+						}
+					}
 
 					if (!info.UpdateLastTime(message.OpenTime))
 						continue;
 					
-					if (!info.Holder.UpdateCandle(message, out var candle))
+					if (!info.UpdateCandle(message, out var candle))
 						continue;
 
 					yield return Tuple.Create(info.Subscription, candle);

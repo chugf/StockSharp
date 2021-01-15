@@ -46,6 +46,11 @@ namespace StockSharp.Logging
 		ILogSource Parent { get; set; }
 
 		/// <summary>
+		/// <see cref="Parent"/> removed.
+		/// </summary>
+		event Action<ILogSource> ParentRemoved;
+
+		/// <summary>
 		/// The logging level for the source.
 		/// </summary>
 		LogLevels LogLevel { get; set; }
@@ -80,7 +85,14 @@ namespace StockSharp.Logging
 		}
 
 		/// <inheritdoc />
-		[Browsable(false)]
+		//[Browsable(false)]
+		[Display(
+			ResourceType = typeof(LocalizedStrings),
+			Name = LocalizedStrings.IdKey,
+			Description = LocalizedStrings.IdKey,
+			GroupName = LocalizedStrings.LoggingKey,
+			Order = 1000)]
+		[ReadOnly(true)]
 		public virtual Guid Id { get; set; } = Guid.NewGuid();
 
 		private string _name;
@@ -92,7 +104,7 @@ namespace StockSharp.Logging
 			Name = LocalizedStrings.NameKey,
 			Description = LocalizedStrings.Str7Key,
 			GroupName = LocalizedStrings.LoggingKey,
-			Order = 1000)]
+			Order = 1001)]
 		public virtual string Name
 		{
 			get => _name;
@@ -124,8 +136,14 @@ namespace StockSharp.Logging
 					throw new ArgumentException(LocalizedStrings.CyclicDependency.Put(this), nameof(value));
 
 				_parent = value;
+
+				if (_parent == null)
+					ParentRemoved?.Invoke(this);
 			}
 		}
+
+		/// <inheritdoc />
+		public event Action<ILogSource> ParentRemoved;
 
 		/// <inheritdoc />
 		[Display(

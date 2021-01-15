@@ -33,8 +33,7 @@ namespace StockSharp.BusinessEntities
 	/// </summary>
 	[System.Runtime.Serialization.DataContract]
 	[Serializable]
-	//[EntityFactory(typeof(UnitializedEntityFactory<MarketDepth>))]
-	public class MarketDepth : Cloneable<MarketDepth>, IEnumerable<QuoteChange>//, ISynchronizedCollection
+	public class MarketDepth : Cloneable<MarketDepth>, IEnumerable<QuoteChange>
 	{
 		/// <summary>
 		/// Create order book.
@@ -74,12 +73,11 @@ namespace StockSharp.BusinessEntities
 		public Security Security { get; }
 
 		/// <summary>
-		/// Whether to use aggregated quotes <see cref="AggregatedQuote"/> at the join of the volumes with the same price.
+		/// Whether to use aggregated quotes <see cref="QuoteChange.InnerQuotes"/> at the join of the volumes with the same price.
 		/// </summary>
 		/// <remarks>
 		/// The default is disabled for performance.
 		/// </remarks>
-		[Obsolete]
 		public bool UseAggregatedQuotes { get; set; }
 
 		/// <summary>
@@ -104,10 +102,16 @@ namespace StockSharp.BusinessEntities
 			Order = 3)]
 		public DateTimeOffset LocalTime { get; set; }
 
-		private bool _bidsInitialized;
+		/// <summary>
+		/// Sequence number.
+		/// </summary>
+		/// <remarks>Zero means no information.</remarks>
+		public long SeqNum { get; set; }
 
-		[Obsolete]
-		private Quote[] _bids;
+		/// <summary>
+		/// Determines the message is generated from the specified <see cref="Messages.DataType"/>.
+		/// </summary>
+		public Messages.DataType BuildFrom { get; set; }
 
 		/// <summary>
 		/// Get the array of bids sorted by descending price. The first (best) bid will be the maximum price.
@@ -119,24 +123,7 @@ namespace StockSharp.BusinessEntities
 			GroupName = LocalizedStrings.Str1559Key,
 			Order = 0)]
 		[Obsolete("Use Bids2 property.")]
-		public Quote[] Bids 
-		{
-			get
-			{
-				if (!_bidsInitialized)
-				{
-					_bids = _bids2.Select(c => c.ToQuote(Sides.Buy, Security)).ToArray();
-					_bidsInitialized = true;
-				}
-
-				return _bids;
-			}
-		}
-
-		private bool _asksInitialized;
-
-		[Obsolete]
-		private Quote[] _asks;
+		public Quote[] Bids => Bids2.Select(c => c.ToQuote(Sides.Buy, Security)).ToArray();
 
 		/// <summary>
 		/// Get the array of asks sorted by ascending price. The first (best) ask will be the minimum price.
@@ -148,19 +135,7 @@ namespace StockSharp.BusinessEntities
 			GroupName = LocalizedStrings.Str1559Key,
 			Order = 1)]
 		[Obsolete("Use Asks2 property.")]
-		public Quote[] Asks 
-		{ 
-			get
-			{
-				if (!_asksInitialized)
-				{
-					_asks = _asks2.Select(c => c.ToQuote(Sides.Sell, Security)).ToArray();
-					_asksInitialized = true;
-				}
-
-				return _asks;
-			}
-		}
+		public Quote[] Asks => Asks2.Select(c => c.ToQuote(Sides.Sell, Security)).ToArray();
 
 		private QuoteChange[] _bids2 = ArrayHelper.Empty<QuoteChange>();
 
@@ -600,7 +575,7 @@ namespace StockSharp.BusinessEntities
 		}
 
 		/// <summary>
-		/// To add the quote. If a quote with the same price is already in the order book, they are combined into the <see cref="AggregatedQuote"/>.
+		/// To add the quote. If a quote with the same price is already in the order book, they are combined into the <see cref="QuoteChange.InnerQuotes"/>.
 		/// </summary>
 		/// <param name="quote">The new quote.</param>
 		/// <param name="side">Side.</param>
@@ -978,7 +953,9 @@ namespace StockSharp.BusinessEntities
 				LocalTime = LocalTime,
 				LastChangeTime = LastChangeTime,
 				_bids2 = _bids2.ToArray(),
-				_asks2 = _asks2.ToArray()
+				_asks2 = _asks2.ToArray(),
+				SeqNum = SeqNum,
+				BuildFrom = BuildFrom,
 			};
 		}
 

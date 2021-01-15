@@ -97,6 +97,8 @@ namespace StockSharp.Algo.Import
 						fields.Add(new FieldMapping<ExecutionMessage, bool>(nameof(ExecutionMessage.IsSystem), LocalizedStrings.Str342, LocalizedStrings.Str140, (i, v) => i.IsSystem = v));
 						fields.Add(new FieldMapping<ExecutionMessage, bool>(nameof(ExecutionMessage.IsUpTick), LocalizedStrings.Str157, LocalizedStrings.Str158, (i, v) => i.IsUpTick = v));
 						fields.Add(new FieldMapping<ExecutionMessage, CurrencyTypes>(nameof(ExecutionMessage.Currency), LocalizedStrings.Currency, LocalizedStrings.Str382, (i, v) => i.Currency = v));
+						fields.Add(new FieldMapping<ExecutionMessage, long>(nameof(ExecutionMessage.OrderBuyId), LocalizedStrings.Buy, LocalizedStrings.OrderBuyId, (i, v) => i.OrderBuyId = v));
+						fields.Add(new FieldMapping<ExecutionMessage, long>(nameof(ExecutionMessage.OrderSellId), LocalizedStrings.Sell, LocalizedStrings.OrderSellId, (i, v) => i.OrderSellId = v));
 
 						break;
 					}
@@ -220,6 +222,24 @@ namespace StockSharp.Algo.Import
 					q.Condition = v;
 					i.Quote = q;
 				}));
+				fields.Add(new FieldMapping<TimeQuoteChange, int>(nameof(QuoteChange.StartPosition), LocalizedStrings.Str2421, LocalizedStrings.Str2421, (i, v) =>
+				{
+					var q = i.Quote;
+					q.StartPosition = v;
+					i.Quote = q;
+				}));
+				fields.Add(new FieldMapping<TimeQuoteChange, int>(nameof(QuoteChange.EndPosition), LocalizedStrings.End, LocalizedStrings.End, (i, v) =>
+				{
+					var q = i.Quote;
+					q.EndPosition = v;
+					i.Quote = q;
+				}));
+				fields.Add(new FieldMapping<TimeQuoteChange, QuoteChangeActions>(nameof(QuoteChange.Action), LocalizedStrings.Str722, LocalizedStrings.Str722, (i, v) =>
+				{
+					var q = i.Quote;
+					q.Action = v;
+					i.Quote = q;
+				}));
 			}
 			else if (msgType == typeof(Level1ChangeMessage))
 			{
@@ -251,6 +271,7 @@ namespace StockSharp.Algo.Import
 				fields.Add(new FieldMapping<PositionChangeMessage, TimeSpan>(GetTimeOfDayField(nameof(PositionChangeMessage.ServerTime)), LocalizedStrings.Time, timeDescr, (i, v) => i.ServerTime += v));
 
 				fields.Add(new FieldMapping<PositionChangeMessage, string>(nameof(PositionChangeMessage.StrategyId), LocalizedStrings.Strategy, LocalizedStrings.Strategy, (i, v) => i.StrategyId = v) { IsRequired = false });
+				fields.Add(new FieldMapping<PositionChangeMessage, Sides>(nameof(PositionChangeMessage.Side), LocalizedStrings.Side, LocalizedStrings.Side, (i, v) => i.Side = v) { IsRequired = false });
 
 				foreach (var f in Enumerator.GetValues<PositionChangeTypes>().Where(l1 => !l1.IsObsolete()))
 				{

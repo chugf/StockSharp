@@ -57,6 +57,11 @@ namespace StockSharp.Algo.Storages.Binary
 				return;
 
 			WriteFractionalPrice(stream);
+
+			if (Version < MarketDataVersions.Version60)
+				return;
+
+			WriteSeqNums(stream);
 		}
 
 		public override void Read(Stream stream)
@@ -82,6 +87,11 @@ namespace StockSharp.Algo.Storages.Binary
 				return;
 
 			ReadFractionalPrice(stream);
+
+			if (Version < MarketDataVersions.Version60)
+				return;
+
+			ReadSeqNums(stream);
 		}
 	}
 
@@ -89,7 +99,7 @@ namespace StockSharp.Algo.Storages.Binary
 		where TCandleMessage : CandleMessage, new()
 	{
 		public CandleBinarySerializer(SecurityId securityId, object arg, IExchangeInfoProvider exchangeInfoProvider)
-			: base(securityId, arg, 74, MarketDataVersions.Version59, exchangeInfoProvider)
+			: base(securityId, arg, 74, MarketDataVersions.Version61, exchangeInfoProvider)
 		{
 		}
 
@@ -107,6 +117,7 @@ namespace StockSharp.Algo.Storages.Binary
 					metaInfo.FirstFractionalPrice = metaInfo.LastFractionalPrice = low;
 
 				metaInfo.ServerOffset = firstCandle.OpenTime.Offset;
+				metaInfo.FirstSeqNum = metaInfo.PrevSeqNum = firstCandle.SeqNum;
 			}
 
 			writer.WriteInt(candles.Count());
@@ -119,59 +130,61 @@ namespace StockSharp.Algo.Storages.Binary
 			var isTickPrecision = bigRange;
 			var useLong = metaInfo.Version >= MarketDataVersions.Version58;
 			var buildFrom = metaInfo.Version >= MarketDataVersions.Version59;
+			var seqNum = metaInfo.Version >= MarketDataVersions.Version60;
+			var largeDecimal = metaInfo.Version >= MarketDataVersions.Version61;
 
 			foreach (var candle in candles)
 			{
 				if (candle.State == CandleStates.Active)
 					throw new ArgumentException(LocalizedStrings.CandleActiveNotSupport.Put(candle), nameof(candle));
 
-				writer.WriteVolume(candle.TotalVolume, metaInfo, SecurityId);
+				writer.WriteVolume(candle.TotalVolume, metaInfo, largeDecimal);
 
 				if (metaInfo.Version < MarketDataVersions.Version52)
-					writer.WriteVolume(candle.RelativeVolume ?? 0, metaInfo, SecurityId);
+					writer.WriteVolume(candle.RelativeVolume ?? 0, metaInfo, false);
 				else
 				{
 					writer.Write(candle.RelativeVolume != null);
 
 					if (candle.RelativeVolume != null)
-						writer.WriteVolume(candle.RelativeVolume.Value, metaInfo, SecurityId);
+						writer.WriteVolume(candle.RelativeVolume.Value, metaInfo, largeDecimal);
 				}
 
 				if (metaInfo.Version < MarketDataVersions.Version56)
 				{
 					var prevPrice = metaInfo.LastPrice;
-					writer.WritePrice(candle.LowPrice, ref prevPrice, metaInfo, SecurityId);
+					writer.WritePrice(candle.LowPrice, ref prevPrice, metaInfo, SecurityId, false, false);
 					metaInfo.LastPrice = prevPrice;
 
 					prevPrice = metaInfo.LastPrice;
-					writer.WritePrice(candle.OpenPrice, ref prevPrice, metaInfo, SecurityId);
+					writer.WritePrice(candle.OpenPrice, ref prevPrice, metaInfo, SecurityId, false, false);
 
 					prevPrice = metaInfo.LastPrice;
-					writer.WritePrice(candle.ClosePrice, ref prevPrice, metaInfo, SecurityId);
+					writer.WritePrice(candle.ClosePrice, ref prevPrice, metaInfo, SecurityId, false, false);
 
 					prevPrice = metaInfo.LastPrice;
-					writer.WritePrice(candle.HighPrice, ref prevPrice, metaInfo, SecurityId);
+					writer.WritePrice(candle.HighPrice, ref prevPrice, metaInfo, SecurityId, false, false);
 				}
 				else
 				{
-					writer.WritePriceEx(candle.LowPrice, metaInfo, SecurityId, useLong);
+					writer.WritePriceEx(candle.LowPrice, metaInfo, SecurityId, useLong, largeDecimal);
 
 					if (candle.OpenPrice <= candle.ClosePrice)
 					{
 						writer.Write(true);
 
-						writer.WritePriceEx(candle.OpenPrice, metaInfo, SecurityId, useLong);
-						writer.WritePriceEx(candle.ClosePrice, metaInfo, SecurityId, useLong);
+						writer.WritePriceEx(candle.OpenPrice, metaInfo, SecurityId, useLong, largeDecimal);
+						writer.WritePriceEx(candle.ClosePrice, metaInfo, SecurityId, useLong, largeDecimal);
 					}
 					else
 					{
 						writer.Write(false);
 
-						writer.WritePriceEx(candle.ClosePrice, metaInfo, SecurityId, useLong);
-						writer.WritePriceEx(candle.OpenPrice, metaInfo, SecurityId, useLong);
+						writer.WritePriceEx(candle.ClosePrice, metaInfo, SecurityId, useLong, largeDecimal);
+						writer.WritePriceEx(candle.OpenPrice, metaInfo, SecurityId, useLong, largeDecimal);
 					}
 
-					writer.WritePriceEx(candle.HighPrice, metaInfo, SecurityId, useLong);
+					writer.WritePriceEx(candle.HighPrice, metaInfo, SecurityId, useLong, largeDecimal);
 				}
 
 				if (!candle.CloseTime.IsDefault() && candle.OpenTime > candle.CloseTime)
@@ -254,10 +267,10 @@ namespace StockSharp.Algo.Storages.Binary
 				{
 					if (metaInfo.Version < MarketDataVersions.Version51)
 					{
-						writer.WriteVolume(candle.OpenVolume ?? 0m, metaInfo, SecurityId);
-						writer.WriteVolume(candle.HighVolume ?? 0m, metaInfo, SecurityId);
-						writer.WriteVolume(candle.LowVolume ?? 0m, metaInfo, SecurityId);
-						writer.WriteVolume(candle.CloseVolume ?? 0m, metaInfo, SecurityId);
+						writer.WriteVolume(candle.OpenVolume ?? 0m, metaInfo, false);
+						writer.WriteVolume(candle.HighVolume ?? 0m, metaInfo, false);
+						writer.WriteVolume(candle.LowVolume ?? 0m, metaInfo, false);
+						writer.WriteVolume(candle.CloseVolume ?? 0m, metaInfo, false);
 					}
 					else
 					{
@@ -266,7 +279,7 @@ namespace StockSharp.Algo.Storages.Binary
 						else
 						{
 							writer.Write(true);
-							writer.WriteVolume(candle.OpenVolume.Value, metaInfo, SecurityId);
+							writer.WriteVolume(candle.OpenVolume.Value, metaInfo, largeDecimal);
 						}
 
 						if (candle.HighVolume == null)
@@ -274,7 +287,7 @@ namespace StockSharp.Algo.Storages.Binary
 						else
 						{
 							writer.Write(true);
-							writer.WriteVolume(candle.HighVolume.Value, metaInfo, SecurityId);
+							writer.WriteVolume(candle.HighVolume.Value, metaInfo, largeDecimal);
 						}
 
 						if (candle.LowVolume == null)
@@ -282,7 +295,7 @@ namespace StockSharp.Algo.Storages.Binary
 						else
 						{
 							writer.Write(true);
-							writer.WriteVolume(candle.LowVolume.Value, metaInfo, SecurityId);
+							writer.WriteVolume(candle.LowVolume.Value, metaInfo, largeDecimal);
 						}
 
 						if (candle.CloseVolume == null)
@@ -290,7 +303,7 @@ namespace StockSharp.Algo.Storages.Binary
 						else
 						{
 							writer.Write(true);
-							writer.WriteVolume(candle.CloseVolume.Value, metaInfo, SecurityId);
+							writer.WriteVolume(candle.CloseVolume.Value, metaInfo, largeDecimal);
 						}
 					}
 				}
@@ -303,13 +316,13 @@ namespace StockSharp.Algo.Storages.Binary
 				var oi = candle.OpenInterest;
 
 				if (metaInfo.Version < MarketDataVersions.Version48)
-					writer.WriteVolume(oi ?? 0m, metaInfo, SecurityId);
+					writer.WriteVolume(oi ?? 0m, metaInfo, false);
 				else
 				{
 					writer.Write(oi != null);
 
 					if (oi != null)
-						writer.WriteVolume(oi.Value, metaInfo, SecurityId);
+						writer.WriteVolume(oi.Value, metaInfo, largeDecimal);
 				}
 
 				if (metaInfo.Version < MarketDataVersions.Version52)
@@ -352,17 +365,17 @@ namespace StockSharp.Algo.Storages.Binary
 							metaInfo.LastPrice = prevPrice;
 						}
 						else
-							writer.WritePriceEx(level.Price, metaInfo, SecurityId);
+							writer.WritePriceEx(level.Price, metaInfo, SecurityId, false, largeDecimal);
 
 						writer.WriteInt(level.BuyCount);
 						writer.WriteInt(level.SellCount);
 
-						writer.WriteVolume(level.BuyVolume, metaInfo, SecurityId);
-						writer.WriteVolume(level.SellVolume, metaInfo, SecurityId);
+						writer.WriteVolume(level.BuyVolume, metaInfo, largeDecimal);
+						writer.WriteVolume(level.SellVolume, metaInfo, largeDecimal);
 
 						if (metaInfo.Version >= MarketDataVersions.Version55)
 						{
-							writer.WriteVolume(level.TotalVolume, metaInfo, SecurityId);
+							writer.WriteVolume(level.TotalVolume, metaInfo, largeDecimal);
 						}
 
 						var volumes = level.BuyVolumes;
@@ -379,7 +392,7 @@ namespace StockSharp.Algo.Storages.Binary
 
 							foreach (var volume in volumes)
 							{
-								writer.WriteVolume(volume, metaInfo, SecurityId);
+								writer.WriteVolume(volume, metaInfo, largeDecimal);
 							}
 						}
 
@@ -397,7 +410,7 @@ namespace StockSharp.Algo.Storages.Binary
 
 							foreach (var volume in volumes)
 							{
-								writer.WriteVolume(volume, metaInfo, SecurityId);
+								writer.WriteVolume(volume, metaInfo, largeDecimal);
 							}
 						}
 					}
@@ -407,6 +420,11 @@ namespace StockSharp.Algo.Storages.Binary
 					continue;
 
 				writer.WriteBuildFrom(candle.BuildFrom);
+
+				if (!seqNum)
+					continue;
+
+				writer.WriteSeqNum(candle, metaInfo);
 			}
 		}
 
@@ -414,14 +432,6 @@ namespace StockSharp.Algo.Storages.Binary
 		{
 			var reader = enumerator.Reader;
 			var metaInfo = enumerator.MetaInfo;
-
-			var candle = new TCandleMessage
-			{
-				SecurityId = SecurityId,
-				TotalVolume = reader.ReadVolume(metaInfo),
-				RelativeVolume = metaInfo.Version < MarketDataVersions.Version52 || !reader.Read() ? (decimal?)null : reader.ReadVolume(metaInfo),
-				Arg = Arg
-			};
 
 			var prevTime = metaInfo.FirstTime;
 			var allowNonOrdered = metaInfo.Version >= MarketDataVersions.Version49;
@@ -432,6 +442,16 @@ namespace StockSharp.Algo.Storages.Binary
 			var isTickPrecision = metaInfo.Version >= MarketDataVersions.Version57;
 			var useLong = metaInfo.Version >= MarketDataVersions.Version58;
 			var buildFrom = metaInfo.Version >= MarketDataVersions.Version59;
+			var seqNum = metaInfo.Version >= MarketDataVersions.Version60;
+			var largeDecimal = metaInfo.Version >= MarketDataVersions.Version61;
+
+			var candle = new TCandleMessage
+			{
+				SecurityId = SecurityId,
+				TotalVolume = reader.ReadVolume(metaInfo, largeDecimal),
+				RelativeVolume = metaInfo.Version < MarketDataVersions.Version52 || !reader.Read() ? (decimal?)null : reader.ReadVolume(metaInfo, largeDecimal),
+				Arg = Arg
+			};
 
 			if (metaInfo.Version < MarketDataVersions.Version56)
 			{
@@ -450,20 +470,20 @@ namespace StockSharp.Algo.Storages.Binary
 			}
 			else
 			{
-				candle.LowPrice = reader.ReadPriceEx(metaInfo, useLong);
+				candle.LowPrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
 
 				if (reader.Read())
 				{
-					candle.OpenPrice = reader.ReadPriceEx(metaInfo, useLong);
-					candle.ClosePrice = reader.ReadPriceEx(metaInfo, useLong);
+					candle.OpenPrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
+					candle.ClosePrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
 				}
 				else
 				{
-					candle.ClosePrice = reader.ReadPriceEx(metaInfo, useLong);
-					candle.OpenPrice = reader.ReadPriceEx(metaInfo, useLong);
+					candle.ClosePrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
+					candle.OpenPrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
 				}
 
-				candle.HighPrice = reader.ReadPriceEx(metaInfo, useLong);
+				candle.HighPrice = reader.ReadPriceEx(metaInfo, useLong, largeDecimal);
 			}
 
 			var lastOffset = metaInfo.FirstServerOffset;
@@ -504,17 +524,17 @@ namespace StockSharp.Algo.Storages.Binary
 			{
 				if (metaInfo.Version < MarketDataVersions.Version51)
 				{
-					candle.OpenVolume = reader.ReadVolume(metaInfo);
-					candle.HighVolume = reader.ReadVolume(metaInfo);
-					candle.LowVolume = reader.ReadVolume(metaInfo);
-					candle.CloseVolume = reader.ReadVolume(metaInfo);
+					candle.OpenVolume = reader.ReadVolume(metaInfo, false);
+					candle.HighVolume = reader.ReadVolume(metaInfo, false);
+					candle.LowVolume = reader.ReadVolume(metaInfo, false);
+					candle.CloseVolume = reader.ReadVolume(metaInfo, false);
 				}
 				else
 				{
-					candle.OpenVolume = reader.Read() ? reader.ReadVolume(metaInfo) : (decimal?)null;
-					candle.HighVolume = reader.Read() ? reader.ReadVolume(metaInfo) : (decimal?)null;
-					candle.LowVolume = reader.Read() ? reader.ReadVolume(metaInfo) : (decimal?)null;
-					candle.CloseVolume = reader.Read() ? reader.ReadVolume(metaInfo) : (decimal?)null;
+					candle.OpenVolume = reader.Read() ? reader.ReadVolume(metaInfo, largeDecimal) : (decimal?)null;
+					candle.HighVolume = reader.Read() ? reader.ReadVolume(metaInfo, largeDecimal) : (decimal?)null;
+					candle.LowVolume = reader.Read() ? reader.ReadVolume(metaInfo, largeDecimal) : (decimal?)null;
+					candle.CloseVolume = reader.Read() ? reader.ReadVolume(metaInfo, largeDecimal) : (decimal?)null;
 				}
 			}
 
@@ -525,7 +545,7 @@ namespace StockSharp.Algo.Storages.Binary
 			if (metaInfo.Version >= MarketDataVersions.Version45)
 			{
 				if (metaInfo.Version < MarketDataVersions.Version48 || reader.Read())
-					candle.OpenInterest = reader.ReadVolume(metaInfo);
+					candle.OpenInterest = reader.ReadVolume(metaInfo, largeDecimal);
 			}
 
 			if (metaInfo.Version >= MarketDataVersions.Version52)
@@ -550,22 +570,22 @@ namespace StockSharp.Algo.Storages.Binary
 					{
 						Price = metaInfo.Version < MarketDataVersions.Version56
 								? reader.ReadPrice(ref prevPrice, metaInfo)
-								: reader.ReadPriceEx(metaInfo),
+								: reader.ReadPriceEx(metaInfo, false, largeDecimal),
 						BuyCount = reader.ReadInt(),
 						SellCount = reader.ReadInt(),
-						BuyVolume = reader.ReadVolume(metaInfo),
-						SellVolume = reader.ReadVolume(metaInfo)
+						BuyVolume = reader.ReadVolume(metaInfo, largeDecimal),
+						SellVolume = reader.ReadVolume(metaInfo, largeDecimal)
 					};
 
 					if (metaInfo.Version >= MarketDataVersions.Version55)
-						priceLevel.TotalVolume = reader.ReadVolume(metaInfo);
+						priceLevel.TotalVolume = reader.ReadVolume(metaInfo, largeDecimal);
 
 					if (reader.Read())
 					{
 						var volumes = new decimal[reader.ReadInt()];
 
 						for (var j = 0; j < volumes.Length; j++)
-							volumes[j] = reader.ReadVolume(metaInfo);
+							volumes[j] = reader.ReadVolume(metaInfo, largeDecimal);
 
 						priceLevel.BuyVolumes = volumes;
 					}
@@ -575,7 +595,7 @@ namespace StockSharp.Algo.Storages.Binary
 						var volumes = new decimal[reader.ReadInt()];
 
 						for (var j = 0; j < volumes.Length; j++)
-							volumes[j] = reader.ReadVolume(metaInfo);
+							volumes[j] = reader.ReadVolume(metaInfo, largeDecimal);
 
 						priceLevel.SellVolumes = volumes;
 					}
@@ -590,6 +610,11 @@ namespace StockSharp.Algo.Storages.Binary
 				return candle;
 			
 			candle.BuildFrom = reader.ReadBuildFrom();
+
+			if (!seqNum)
+				return candle;
+
+			reader.ReadSeqNum(candle, metaInfo);
 
 			return candle;
 		}

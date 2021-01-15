@@ -13,12 +13,10 @@
 	/// <summary>
 	/// Order book builder, used incremental <see cref="QuoteChangeMessage"/>.
 	/// </summary>
-	public class OrderBookIncrementBuilder
+	public class OrderBookIncrementBuilder : BaseLogReceiver
 	{
 		private const QuoteChangeStates _none = (QuoteChangeStates)(-1);
 		private QuoteChangeStates _state = _none;
-
-		private readonly ILogReceiver _logs;
 
 		private readonly SortedList<decimal, QuoteChange> _bids = new SortedList<decimal, QuoteChange>(new BackwardComparer<decimal>());
 		private readonly SortedList<decimal, QuoteChange> _asks = new SortedList<decimal, QuoteChange>();
@@ -26,18 +24,18 @@
 		private readonly List<QuoteChange> _bidsByPos = new List<QuoteChange>();
 		private readonly List<QuoteChange> _asksByPos = new List<QuoteChange>();
 
+		private readonly HashSet<long> _invalidSubscriptions = new HashSet<long>();
+
 		/// <summary>
 		/// Initializes a new instance of the <see cref="OrderBookIncrementBuilder"/>.
 		/// </summary>
 		/// <param name="securityId">Security ID.</param>
-		/// <param name="logs">Logs.</param>
-		public OrderBookIncrementBuilder(SecurityId securityId, ILogReceiver logs)
+		public OrderBookIncrementBuilder(SecurityId securityId)
 		{
 			if (securityId == default)
 				throw new ArgumentNullException(nameof(securityId));
 
 			SecurityId = securityId;
-			_logs = logs ?? throw new ArgumentNullException(nameof(logs));
 		}
 
 		/// <summary>
@@ -49,19 +47,35 @@
 		/// Try create full book.
 		/// </summary>
 		/// <param name="change">Book change.</param>
+		/// <param name="subscriptionId">Subscription.</param>
 		/// <returns>Full book.</returns>
-		public QuoteChangeMessage TryApply(QuoteChangeMessage change)
+		public QuoteChangeMessage TryApply(QuoteChangeMessage change, long subscriptionId = default)
 		{
 			if (change is null)
 				throw new ArgumentNullException(nameof(change));
 
-			if (change.State == null)
+			if (change.State is null)
 				throw new ArgumentException(nameof(change));
 
 			var currState = _state;
 			var newState = change.State.Value;
 
-			void CheckSwitch()
+			void WriteWarning()
+			{
+				var postfix = string.Empty;
+
+				if (subscriptionId != default)
+				{
+					if (!_invalidSubscriptions.Add(subscriptionId))
+						return;
+
+					postfix = $" (sub={subscriptionId})";
+				}
+
+				this.AddWarningLog($"{currState}->{newState}{postfix}");
+			}
+
+			bool CheckSwitch()
 			{
 				switch (currState)
 				{
@@ -69,14 +83,20 @@
 					case QuoteChangeStates.SnapshotStarted:
 					{
 						if (newState != QuoteChangeStates.SnapshotBuilding && newState != QuoteChangeStates.SnapshotComplete)
-							_logs.AddDebugLog($"{currState}->{newState}");
+						{
+							WriteWarning();
+							return false;
+						}
 
 						break;
 					}
 					case QuoteChangeStates.SnapshotBuilding:
 					{
 						if (newState != QuoteChangeStates.SnapshotBuilding && newState != QuoteChangeStates.SnapshotComplete)
-							_logs.AddDebugLog($"{currState}->{newState}");
+						{
+							WriteWarning();
+							return false;
+						}
 
 						break;
 					}
@@ -84,56 +104,38 @@
 					case QuoteChangeStates.Increment:
 					{
 						if (newState == QuoteChangeStates.SnapshotBuilding)
-							_logs.AddDebugLog($"{currState}->{newState}");
-
-						break;
-					}
-				}
-			}
-
-			if (currState != newState || newState == QuoteChangeStates.SnapshotComplete)
-			{
-				CheckSwitch();
-
-				if (newState == QuoteChangeStates.SnapshotStarted)
-				{
-					_bids.Clear();
-					_asks.Clear();
-				}
-
-				switch (currState)
-				{
-					case _none:
-					{
-						_bids.Clear();
-						_asks.Clear();
-
-						break;
-					}
-					case QuoteChangeStates.SnapshotStarted:
-						break;
-					case QuoteChangeStates.SnapshotBuilding:
-						break;
-					case QuoteChangeStates.SnapshotComplete:
-					{
-						if (newState == QuoteChangeStates.SnapshotComplete)
 						{
-							_bids.Clear();
-							_asks.Clear();
+							WriteWarning();
+							return false;
 						}
 
 						break;
 					}
-					case QuoteChangeStates.Increment:
-						break;
-					default:
-						throw new ArgumentOutOfRangeException(currState.ToString());
+				}
+
+				return true;
+			}
+
+			var resetState = newState == QuoteChangeStates.SnapshotStarted || newState == QuoteChangeStates.SnapshotComplete;
+
+			if (currState != newState || resetState)
+			{
+				if (!CheckSwitch())
+					return null;
+
+				if (currState == _none || resetState)
+				{
+					_bids.Clear();
+					_asks.Clear();
+
+					_bidsByPos.Clear();
+					_asksByPos.Clear();
 				}
 
 				_state = currState = newState;
 			}
 
-			void Apply(IEnumerable<QuoteChange> from, SortedList<decimal, QuoteChange> to)
+			static void Apply(IEnumerable<QuoteChange> from, SortedList<decimal, QuoteChange> to)
 			{
 				foreach (var quote in from)
 				{
@@ -144,7 +146,7 @@
 				}
 			}
 
-			void ApplyByPos(IEnumerable<QuoteChange> from, List<QuoteChange> to)
+			static void ApplyByPos(IEnumerable<QuoteChange> from, List<QuoteChange> to)
 			{
 				foreach (var quote in from)
 				{
@@ -154,14 +156,14 @@
 					{
 						case QuoteChangeActions.New:
 						{
-							var tuple = new QuoteChange(quote.Price, quote.Volume, quote.OrdersCount, quote.Condition);
+							var newQuote = new QuoteChange(quote.Price, quote.Volume, quote.OrdersCount, quote.Condition);
 
 							if (startPos > to.Count)
 								throw new InvalidOperationException($"Pos={startPos}>Count={to.Count}");
 							else if (startPos == to.Count)
-								to.Add(tuple);
+								to.Add(newQuote);
 							else
-								to.Insert(startPos, tuple);
+								to.Insert(startPos, newQuote);
 
 							break;
 						}
@@ -198,6 +200,15 @@
 
 			if (currState == QuoteChangeStates.SnapshotStarted || currState == QuoteChangeStates.SnapshotBuilding)
 				return null;
+
+			if (currState == QuoteChangeStates.SnapshotComplete)
+			{
+				if (!change.HasPositions)
+				{
+					_bidsByPos.AddRange(_bids.Values);
+					_asksByPos.AddRange(_asks.Values);
+				}
+			}
 
 			QuoteChange[] bids;
 			QuoteChange[] asks;

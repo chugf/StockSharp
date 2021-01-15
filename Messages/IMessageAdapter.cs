@@ -25,22 +25,6 @@ namespace StockSharp.Messages
 	using StockSharp.Logging;
 
 	/// <summary>
-	/// Types of <see cref="OrderCancelMessage.Volume"/> required to cancel orders.
-	/// </summary>
-	public enum OrderCancelVolumeRequireTypes
-	{
-		/// <summary>
-		/// Non filled balance.
-		/// </summary>
-		Balance,
-
-		/// <summary>
-		/// Initial volume.
-		/// </summary>
-		Volume
-	}
-
-	/// <summary>
 	/// Base message adapter interface which convert messages <see cref="Message"/> to native commands and back.
 	/// </summary>
 	public interface IMessageAdapter : IMessageChannel, IPersistable, ILogReceiver
@@ -141,11 +125,6 @@ namespace StockSharp.Messages
 		MessageAdapterCategories Categories { get; }
 
 		/// <summary>
-		/// <see cref="OrderCancelMessage.Volume"/> required to cancel orders.
-		/// </summary>
-		OrderCancelVolumeRequireTypes? OrderCancelVolumeRequired { get; }
-
-		/// <summary>
 		/// Names of extended security fields in <see cref="SecurityMessage"/>.
 		/// </summary>
 		IEnumerable<Tuple<string, Type>> SecurityExtendedFields { get; }
@@ -237,7 +216,7 @@ namespace StockSharp.Messages
 		/// <param name="from">The initial date from which you need to get data.</param>
 		/// <param name="to">The final date by which you need to get data.</param>
 		/// <returns>Possible args.</returns>
-		IEnumerable<object> GetCandleArgs(Type candleType, SecurityId securityId, DateTimeOffset? from, DateTimeOffset? to);
+		IEnumerable<object> GetCandleArgs(Type candleType, SecurityId securityId = default, DateTimeOffset? from = default, DateTimeOffset? to = default);
 
 		/// <summary>
 		/// Get maximum size step allowed for historical download.
@@ -246,6 +225,13 @@ namespace StockSharp.Messages
 		/// <param name="iterationInterval">Interval between iterations.</param>
 		/// <returns>Step.</returns>
 		TimeSpan GetHistoryStepSize(DataType dataType, out TimeSpan iterationInterval);
+
+		/// <summary>
+		/// Get maximum possible items count per single subscription request.
+		/// </summary>
+		/// <param name="dataType">Data type info.</param>
+		/// <returns>Max items count.</returns>
+		int? GetMaxCount(DataType dataType);
 
 		/// <summary>
 		/// Is for the specified <paramref name="dataType"/> all securities downloading enabled.
@@ -262,7 +248,7 @@ namespace StockSharp.Messages
 		bool IsSecurityRequired(DataType dataType);
 
 		/// <summary>
-		/// Use <see cref="IMessageChannel"/> for in and out messages.
+		/// Use channels for in and out messages.
 		/// </summary>
 		bool UseChannels { get; }
 
@@ -270,6 +256,11 @@ namespace StockSharp.Messages
 		/// Feature name.
 		/// </summary>
 		string FeatureName { get; }
+
+		/// <summary>
+		/// Interval between iterations.
+		/// </summary>
+		TimeSpan IterationInterval { get; }
 	}
 
 	/// <summary>
@@ -352,5 +343,16 @@ namespace StockSharp.Messages
 		/// Target ID.
 		/// </summary>
 		string TargetCompId { get; set; }
+	}
+
+	/// <summary>
+	/// Message adapter, provided <see cref="ClientVersion"/> property.
+	/// </summary>
+	public interface IClientVersionAdapter
+	{
+		/// <summary>
+		/// Client app version.
+		/// </summary>
+		string ClientVersion { get; set; }
 	}
 }

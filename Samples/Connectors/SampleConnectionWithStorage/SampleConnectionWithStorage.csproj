@@ -19,16 +19,6 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="..\SampleConnection\DatesWindow.xaml">
-      <Link>DatesWindow.xaml</Link>
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="..\SampleConnection\DepthSettingsWindow.xaml">
-      <Link>DepthSettingsWindow.xaml</Link>
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Page Include="..\SampleConnection\Level1Window.xaml">
       <Link>Level1Window.xaml</Link>
       <Generator>MSBuild:Compile</Generator>
@@ -86,13 +76,6 @@
     <Compile Include="..\SampleConnection\ChartWindow.xaml.cs" Link="ChartWindow.xaml.cs">
       <DependentUpon>ChartWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="..\SampleConnection\DatesWindow.xaml.cs" Link="DatesWindow.xaml.cs">
-      <DependentUpon>DatesWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="..\SampleConnection\DepthSettings.cs" Link="DepthSettings.cs" />
-    <Compile Include="..\SampleConnection\DepthSettingsWindow.xaml.cs" Link="DepthSettingsWindow.xaml.cs">
-      <DependentUpon>DepthSettingsWindow.xaml</DependentUpon>
-    </Compile>
     <Compile Include="..\SampleConnection\Level1Window.xaml.cs" Link="Level1Window.xaml.cs">
       <DependentUpon>Level1Window.xaml</DependentUpon>
     </Compile>
@@ -130,7 +113,6 @@
     </Resource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\StockSharp (GitLab)\Connectors\Deribit\Deribit.csproj" />
     <ProjectReference Include="..\..\..\Configuration.Adapters\Configuration.Adapters.csproj" />
     <ProjectReference Include="..\..\..\..\StockSharpApps\Xaml.Charting\Xaml.Charting.csproj" />
   </ItemGroup>

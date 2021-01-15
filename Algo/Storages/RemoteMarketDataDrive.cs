@@ -83,9 +83,14 @@ namespace StockSharp.Algo.Storages
 		private readonly Func<IMessageAdapter> _createAdapter;
 
 		/// <summary>
-		/// Default address.
+		/// Default value for <see cref="Address"/>.
 		/// </summary>
 		public static readonly EndPoint DefaultAddress = "127.0.0.1:5002".To<EndPoint>();
+
+		/// <summary>
+		/// Default value for <see cref="TargetCompId"/>.
+		/// </summary>
+		public static readonly string DefaultTargetCompId = "StockSharpHydraMD";
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="RemoteMarketDataDrive"/>.
@@ -138,7 +143,7 @@ namespace StockSharp.Algo.Storages
 			set => _address = value ?? throw new ArgumentNullException(nameof(value));
 		}
 
-		private string _targetCompId = "StockSharpHydraMD";
+		private string _targetCompId = DefaultTargetCompId;
 
 		/// <summary>
 		/// Target ID.
@@ -199,12 +204,13 @@ namespace StockSharp.Algo.Storages
 			=> CreateClient().GetAvailableDataTypes(securityId, format);
 
 		/// <inheritdoc />
-		public override IMarketDataStorageDrive GetStorageDrive(SecurityId securityId, Type dataType, object arg, StorageFormats format)
+		public override IMarketDataStorageDrive GetStorageDrive(SecurityId securityId, DataType dataType, StorageFormats format)
 		{
-			var dt = DataType.Create(dataType, arg);
+			if (dataType is null)
+				throw new ArgumentNullException(nameof(dataType));
 
-			return _remoteStorages.SafeAdd(Tuple.Create(securityId, dt, format),
-				key => new RemoteStorageDrive(this, securityId, dt, format));
+			return _remoteStorages.SafeAdd(Tuple.Create(securityId, dataType, format),
+				key => new RemoteStorageDrive(this, securityId, dataType, format));
 		}
 
 		/// <inheritdoc />
@@ -219,6 +225,7 @@ namespace StockSharp.Algo.Storages
 		{
 			base.Load(storage);
 
+			TargetCompId = storage.GetValue(nameof(TargetCompId), TargetCompId);
 			Credentials.Load(storage.GetValue<SettingsStorage>(nameof(Credentials)));
 		}
 
@@ -227,6 +234,7 @@ namespace StockSharp.Algo.Storages
 		{
 			base.Save(storage);
 
+			storage.SetValue(nameof(TargetCompId), TargetCompId);
 			storage.SetValue(nameof(Credentials), Credentials.Save());
 		}
 	}

@@ -77,10 +77,8 @@ namespace StockSharp.Messages
 
 				_innerAdapter = value;
 
-				if (_innerAdapter == null)
-					throw new ArgumentException();
-
-				_innerAdapter.NewOutMessage += InnerAdapterNewOutMessage;
+				if (_innerAdapter != null)
+					_innerAdapter.NewOutMessage += InnerAdapterNewOutMessage;
 			}
 		}
 
@@ -234,6 +232,13 @@ namespace StockSharp.Messages
 			set => InnerAdapter.Parent = value;
 		}
 
+		/// <inheritdoc />
+		public event Action<ILogSource> ParentRemoved
+		{
+			add { }
+			remove { }
+		}
+
 		LogLevels ILogSource.LogLevel
 		{
 			get => InnerAdapter.LogLevel;
@@ -317,9 +322,6 @@ namespace StockSharp.Messages
 		/// <inheritdoc />
 		public virtual MessageAdapterCategories Categories => InnerAdapter.Categories;
 
-		/// <inheritdoc />
-		public virtual OrderCancelVolumeRequireTypes? OrderCancelVolumeRequired => InnerAdapter.OrderCancelVolumeRequired;
-
 		IEnumerable<Tuple<string, Type>> IMessageAdapter.SecurityExtendedFields => InnerAdapter.SecurityExtendedFields;
 
 		/// <inheritdoc />
@@ -358,6 +360,8 @@ namespace StockSharp.Messages
 
 		bool IMessageAdapter.UseChannels => InnerAdapter.UseChannels;
 
+		TimeSpan IMessageAdapter.IterationInterval => InnerAdapter.IterationInterval;
+
 		string IMessageAdapter.FeatureName => InnerAdapter.FeatureName;
 
 		/// <inheritdoc />
@@ -381,6 +385,9 @@ namespace StockSharp.Messages
 			=> InnerAdapter.GetHistoryStepSize(dataType, out iterationInterval);
 
 		/// <inheritdoc />
+		public virtual int? GetMaxCount(DataType dataType) => InnerAdapter.GetMaxCount(dataType);
+
+		/// <inheritdoc />
 		public virtual bool IsAllDownloadingSupported(DataType dataType)
 			=> InnerAdapter.IsAllDownloadingSupported(dataType);
 
@@ -391,6 +398,9 @@ namespace StockSharp.Messages
 		/// <inheritdoc />
 		public virtual void Dispose()
 		{
+			if (InnerAdapter is null)
+				return;
+
 			InnerAdapter.NewOutMessage -= InnerAdapterNewOutMessage;
 
 			if (OwnInnerAdapter)

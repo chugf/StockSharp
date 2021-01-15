@@ -156,9 +156,27 @@ namespace StockSharp.Messages
 		/// </summary>
 		public IDictionary<UserPermissions, IDictionary<Tuple<string, string, object, DateTime?>, bool>> Permissions { get; } = new Dictionary<UserPermissions, IDictionary<Tuple<string, string, object, DateTime?>, bool>>();
 
+		/// <summary>
+		/// Can publish NuGet packages.
+		/// </summary>
+		[DataMember]
+		public bool CanPublish { get; set; }
+
+		/// <summary>
+		/// Is EULA accepted.
+		/// </summary>
+		[DataMember]
+		public bool? IsAgreementAccepted { get; set; }
+
 		/// <inheritdoc />
 		public override DataType DataType => DataType.Users;
-		
+
+		/// <summary>
+		/// Upload size limit.
+		/// </summary>
+		[DataMember]
+		public long UploadLimit { get; set; }
+
 		/// <summary>
 		/// Initializes a new instance of the <see cref="UserInfoMessage"/>.
 		/// </summary>
@@ -168,10 +186,7 @@ namespace StockSharp.Messages
 		}
 
 		/// <inheritdoc />
-		public override string ToString()
-		{
-			return base.ToString() + $",Name={Login}";
-		}
+		public override string ToString() => base.ToString() + $",Name={Login}";
 
 		/// <inheritdoc />
 		public override void CopyTo(UserInfoMessage destination)
@@ -197,6 +212,9 @@ namespace StockSharp.Messages
 			destination.Avatar = Avatar;
 			destination.CreationDate = CreationDate;
 			destination.AuthToken = AuthToken;
+			destination.CanPublish = CanPublish;
+			destination.IsAgreementAccepted = IsAgreementAccepted;
+			destination.UploadLimit = UploadLimit;
 
 			if (Permissions != null)
 				destination.Permissions.AddRange(Permissions.ToDictionary());

@@ -20,6 +20,7 @@ namespace StockSharp.Messages
 	using System.ComponentModel;
 	using System.ComponentModel.DataAnnotations;
 	using System.Linq;
+	using System.Runtime.CompilerServices;
 
 	using Ecng.Collections;
 	using Ecng.Common;
@@ -40,8 +41,6 @@ namespace StockSharp.Messages
 		/// <param name="transactionIdGenerator">Transaction id generator.</param>
 		protected MessageAdapter(IdGenerator transactionIdGenerator)
 		{
-			Platform = Platforms.AnyCPU;
-
 			TransactionIdGenerator = transactionIdGenerator ?? throw new ArgumentNullException(nameof(transactionIdGenerator));
 			SecurityClassInfo = new Dictionary<string, RefPair<SecurityTypes, string>>();
 
@@ -120,9 +119,9 @@ namespace StockSharp.Messages
 					throw new ArgumentException(LocalizedStrings.Str415Params.Put(duplicate.Key), nameof(value));
 
 				_possibleSupportedMessages = value;
-				OnPropertyChanged(nameof(PossibleSupportedMessages));
+				OnPropertyChanged();
 
-				SupportedInMessages = value.Select(t => t.Type);
+				SupportedInMessages = value.Select(t => t.Type).ToArray();
 			}
 		}
 
@@ -143,6 +142,7 @@ namespace StockSharp.Messages
 					throw new ArgumentException(LocalizedStrings.Str415Params.Put(duplicate.Key), nameof(value));
 
 				_supportedMarketDataTypes = value.ToArray();
+				OnPropertyChanged();
 			}
 		}
 
@@ -210,10 +210,6 @@ namespace StockSharp.Messages
 		/// <inheritdoc />
 		[Browsable(false)]
 		public virtual string StorageName { get; }
-
-		/// <inheritdoc />
-		[Browsable(false)]
-		public virtual OrderCancelVolumeRequireTypes? OrderCancelVolumeRequired { get; } = null;
 
 		/// <summary>
 		/// Bit process, which can run the adapter.
@@ -502,9 +498,10 @@ namespace StockSharp.Messages
 		/// Initialize a new message <see cref="SubscriptionFinishedMessage"/> and pass it to the method <see cref="SendOutMessage"/>.
 		/// </summary>
 		/// <param name="originalTransactionId">ID of the original message for which this message is a response.</param>
-		protected void SendSubscriptionFinished(long originalTransactionId)
+		/// <param name="nextFrom"><see cref="SubscriptionFinishedMessage.NextFrom"/>.</param>
+		protected void SendSubscriptionFinished(long originalTransactionId, DateTimeOffset? nextFrom = null)
 		{
-			SendOutMessage(new SubscriptionFinishedMessage { OriginalTransactionId = originalTransactionId });
+			SendOutMessage(new SubscriptionFinishedMessage { OriginalTransactionId = originalTransactionId, NextFrom = nextFrom });
 		}
 
 		/// <summary>
@@ -554,14 +551,31 @@ namespace StockSharp.Messages
 			=> Extensions.GetHistoryStepSize(this, dataType, out iterationInterval);
 
 		/// <inheritdoc />
+		public virtual int? GetMaxCount(DataType dataType) => dataType.GetDefaultMaxCount();
+
+		/// <inheritdoc />
 		public virtual bool IsAllDownloadingSupported(DataType dataType) => false;
 
 		/// <inheritdoc />
 		public virtual bool IsSecurityRequired(DataType dataType) => dataType.IsSecurityRequired;
 
 		/// <inheritdoc />
-		[Browsable(false)]
-		public virtual bool UseChannels => false;
+		[Display(
+			ResourceType = typeof(LocalizedStrings),
+			Name = LocalizedStrings.ChannelsKey,
+			Description = LocalizedStrings.UseChannelsKey,
+			GroupName = LocalizedStrings.Str186Key,
+			Order = 303)]
+		public virtual bool UseChannels { get; set; }
+
+		/// <inheritdoc />
+		[Display(
+			ResourceType = typeof(LocalizedStrings),
+			Name = LocalizedStrings.IterationsKey,
+			Description = LocalizedStrings.IterationIntervalKey,
+			GroupName = LocalizedStrings.Str186Key,
+			Order = 304)]
+		public virtual TimeSpan IterationInterval { get; set; } = TimeSpan.FromSeconds(2);
 
 		/// <inheritdoc />
 		[Browsable(false)]
@@ -596,6 +610,8 @@ namespace StockSharp.Messages
 
 			EnqueueSubscriptions = storage.GetValue(nameof(EnqueueSubscriptions), EnqueueSubscriptions);
 			GenerateOrderBookFromLevel1 = storage.GetValue(nameof(GenerateOrderBookFromLevel1), GenerateOrderBookFromLevel1);
+			UseChannels = storage.GetValue(nameof(UseChannels), UseChannels);
+			IterationInterval = storage.GetValue(nameof(IterationInterval), IterationInterval);
 
 			base.Load(storage);
 		}
@@ -609,6 +625,8 @@ namespace StockSharp.Messages
 			storage.SetValue(nameof(ReConnectionSettings), ReConnectionSettings.Save());
 			storage.SetValue(nameof(EnqueueSubscriptions), EnqueueSubscriptions);
 			storage.SetValue(nameof(GenerateOrderBookFromLevel1), GenerateOrderBookFromLevel1);
+			storage.SetValue(nameof(UseChannels), UseChannels);
+			storage.SetValue(nameof(IterationInterval), IterationInterval);
 
 			base.Save(storage);
 		}
@@ -641,7 +659,7 @@ namespace StockSharp.Messages
 		/// Raise <see cref="INotifyPropertyChanged.PropertyChanged"/> event.
 		/// </summary>
 		/// <param name="propertyName">The name of the property that changed.</param>
-		protected void OnPropertyChanged(string propertyName)
+		protected void OnPropertyChanged([CallerMemberName]string propertyName = null)
 		{
 			_propertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}

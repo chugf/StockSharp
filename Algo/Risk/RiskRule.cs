@@ -3,10 +3,10 @@ namespace StockSharp.Algo.Risk
 	using System;
 	using System.Collections.Generic;
 	using System.ComponentModel;
+	using System.Runtime.CompilerServices;
 
 	using Ecng.Common;
 	using Ecng.Serialization;
-	using Ecng.Collections;
 
 	using StockSharp.Messages;
 	using StockSharp.Localization;
@@ -36,7 +36,7 @@ namespace StockSharp.Algo.Risk
 			protected set
 			{
 				_title = value;
-				NotifyChanged(nameof(Title));
+				NotifyChanged();
 			}
 		}
 
@@ -52,7 +52,7 @@ namespace StockSharp.Algo.Risk
 			set
 			{
 				_action = value;
-				NotifyChanged(nameof(Action));
+				NotifyChanged();
 			}
 		}
 
@@ -88,7 +88,7 @@ namespace StockSharp.Algo.Risk
 			remove => _propertyChanged -= value;
 		}
 
-		private void NotifyChanged(string propertyName)
+		private void NotifyChanged([CallerMemberName]string propertyName = null)
 		{
 			_propertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}
@@ -139,7 +139,7 @@ namespace StockSharp.Algo.Risk
 			if (!pfMsg.IsMoney())
 				return false;
 
-			var currValue = (decimal?)pfMsg.Changes.TryGetValue(PositionChangeTypes.CurrentValue);
+			var currValue = pfMsg.TryGetDecimal(PositionChangeTypes.CurrentValue);
 
 			if (currValue == null)
 				return false;
@@ -213,7 +213,7 @@ namespace StockSharp.Algo.Risk
 				return false;
 
 			var posMsg = (PositionChangeMessage)message;
-			var currValue = (decimal?)posMsg.Changes.TryGetValue(PositionChangeTypes.CurrentValue);
+			var currValue = posMsg.TryGetDecimal(PositionChangeTypes.CurrentValue);
 
 			if (currValue == null)
 				return false;
@@ -285,7 +285,7 @@ namespace StockSharp.Algo.Risk
 				case MessageTypes.PositionChange:
 				{
 					var posMsg = (PositionChangeMessage)message;
-					var currValue = (decimal?)posMsg.Changes.TryGetValue(PositionChangeTypes.CurrentValue);
+					var currValue = posMsg.TryGetDecimal(PositionChangeTypes.CurrentValue);
 
 					if (currValue == null)
 						return false;
@@ -392,7 +392,7 @@ namespace StockSharp.Algo.Risk
 			if (!pfMsg.IsMoney())
 				return false;
 
-			var currValue = (decimal?)pfMsg.Changes.TryGetValue(PositionChangeTypes.Commission);
+			var currValue = pfMsg.TryGetDecimal(PositionChangeTypes.Commission);
 
 			if (currValue == null)
 				return false;

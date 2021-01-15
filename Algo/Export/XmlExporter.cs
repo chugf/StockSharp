@@ -68,6 +68,9 @@ namespace StockSharp.Algo.Export
 					.WriteAttribute("timeInForce", item.TimeInForce)
 					.WriteAttribute("isSystem", item.IsSystem);
 
+				if (item.SeqNum != default)
+					writer.WriteAttribute("seqNum", item.SeqNum);
+
 				if (item.TradePrice != null)
 				{
 					writer
@@ -107,6 +110,18 @@ namespace StockSharp.Algo.Export
 
 				if (trade.Currency != null)
 					writer.WriteAttribute("currency", trade.Currency.Value);
+
+				if (trade.SeqNum != default)
+					writer.WriteAttribute("seqNum", trade.SeqNum);
+
+				if (trade.Yield != default)
+					writer.WriteAttribute("yield", trade.Yield);
+
+				if (trade.OrderBuyId != default)
+					writer.WriteAttribute("buy", trade.OrderBuyId);
+
+				if (trade.OrderSellId != default)
+					writer.WriteAttribute("sell", trade.OrderSellId);
 
 				writer.WriteEndElement();
 			});
@@ -188,6 +203,12 @@ namespace StockSharp.Algo.Export
 				if (depth.State != null)
 					writer.WriteAttribute("state", depth.State.Value);
 
+				if (depth.HasPositions)
+					writer.WriteAttribute("pos", true);
+
+				if (depth.SeqNum != default)
+					writer.WriteAttribute("seqNum", depth.SeqNum);
+
 				var bids = new HashSet<QuoteChange>(depth.Bids);
 
 				foreach (var quote in depth.Bids.Concat(depth.Asks).OrderByDescending(q => q.Price))
@@ -232,6 +253,9 @@ namespace StockSharp.Algo.Export
 					.WriteAttribute("serverTime", message.ServerTime.ToString(_timeFormat))
 					.WriteAttribute("localTime", message.LocalTime.ToString(_timeFormat));
 
+				if (message.SeqNum != default)
+					writer.WriteAttribute("seqNum", message.SeqNum);
+
 				foreach (var pair in message.Changes)
 					writer.WriteAttribute(pair.Key.ToString(), (pair.Value as DateTime?)?.ToString(_timeFormat) ?? pair.Value);
 
@@ -254,7 +278,9 @@ namespace StockSharp.Algo.Export
 					.WriteAttribute("clientCode", message.ClientCode)
 					.WriteAttribute("depoName", message.DepoName)
 					.WriteAttribute("limit", message.LimitType)
-					.WriteAttribute("strategyId", message.StrategyId);
+					.WriteAttribute("strategyId", message.StrategyId)
+					.WriteAttribute("side", message.Side)
+					;
 
 				foreach (var pair in message.Changes.Where(c => !c.Key.IsObsolete()))
 					writer.WriteAttribute(pair.Key.ToString(), (pair.Value as DateTime?)?.ToString(_timeFormat) ?? pair.Value);
@@ -299,6 +325,9 @@ namespace StockSharp.Algo.Export
 
 				if (candle.OpenInterest != null)
 					writer.WriteAttribute("openInterest", candle.OpenInterest.Value);
+
+				if (candle.SeqNum != default)
+					writer.WriteAttribute("seqNum", candle.SeqNum);
 
 				if (candle.PriceLevels != null)
 				{
@@ -364,6 +393,9 @@ namespace StockSharp.Algo.Export
 
 				if (!n.Story.IsEmpty())
 					writer.WriteCData(n.Story);
+
+				if (n.SeqNum != default)
+					writer.WriteAttribute("seqNum", n.SeqNum);
 
 				writer.WriteEndElement();
 			});

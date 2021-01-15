@@ -857,7 +857,7 @@ namespace StockSharp.Algo
 							}
 
 							if (Adapter.IsMessageSupported(type) && !_subscriptionManager.Subscriptions.Any(s => s.SubscriptionMessage.DataType == dataType && s.SubscriptionMessage.To == null))
-								_subscriptionManager.Subscribe(new Subscription(dataType, (SecurityMessage)null));
+								_subscriptionManager.Subscribe(dataType.ToSubscription());
 						}
 
 						foreach (var type in _lookupMessagesOnConnect.Cache)
@@ -971,10 +971,13 @@ namespace StockSharp.Algo
 
 		private void ProcessLevel1ChangeMessage(Level1ChangeMessage message)
 		{
-			if (RaiseReceived(message, message, RaiseLevel1Received) == false)
-				return;
-
 			var security = EnsureGetSecurity(message);
+
+			if (RaiseReceived(message, message, RaiseLevel1Received, out var anyCanOnline) == false)
+			{
+				if (anyCanOnline != true || _entityCache.HasLevel1Info(security))
+					return;
+			}
 
 			if (UpdateSecurityByLevel1)
 			{
@@ -1028,7 +1031,11 @@ namespace StockSharp.Algo
 		/// <inheritdoc />
 		public Portfolio LookupByPortfolioName(string name) => GetPortfolio(name, null, out _);
 
-		/// <inheritdoc />
+		/// <summary>
+		/// To get the portfolio by the code name.
+		/// </summary>
+		/// <param name="name">Portfolio code name.</param>
+		/// <returns>The got portfolio. If there is no portfolio by given criteria, <see langword="null" /> is returned.</returns>
 		public Portfolio GetPortfolio(string name) => LookupByPortfolioName(name);
 
 		private Portfolio GetPortfolio(string name, Func<Portfolio, bool> changePortfolio, out bool isNew)
@@ -1115,7 +1122,7 @@ namespace StockSharp.Algo
 				var security = EnsureGetSecurity(message);
 				portfolio = LookupByPortfolioName(message.PortfolioName);
 
-				var valueInLots = message.Changes.TryGetValue(PositionChangeTypes.CurrentValueInLots);
+				var valueInLots = message.TryGetDecimal(PositionChangeTypes.CurrentValueInLots);
 				if (valueInLots != null)
 				{
 					if (!message.Changes.ContainsKey(PositionChangeTypes.CurrentValue))
@@ -1127,7 +1134,7 @@ namespace StockSharp.Algo
 					message.Changes.Remove(PositionChangeTypes.CurrentValueInLots);
 				}
 
-				var position = GetPosition(portfolio, security, message.StrategyId, message.ClientCode, message.DepoName, message.LimitType, message.Description);
+				var position = GetPosition(portfolio, security, message.StrategyId, message.Side, message.ClientCode, message.DepoName, message.LimitType, message.Description);
 				position.ApplyChanges(message);
 
 				RaisePositionChanged(position);
@@ -1187,6 +1194,9 @@ namespace StockSharp.Algo
 					}
 					else
 					{
+						if (subscription.State == SubscriptionStates.Active && subscription.SubscriptionMessage.To is null && !_entityCache.HasMarketDepth(security, message))
+							_entityCache.UpdateMarketDepth(security, message);
+
 						if (hasReceivedEvt)
 							depth = message.ToMarketDepth(EntityFactory.CreateMarketDepth(security));
 					}
@@ -1212,7 +1222,7 @@ namespace StockSharp.Algo
 			var fromLevel1 = message.BuildFrom == DataType.Level1;
 			var time = message.ServerTime;
 
-			if (!fromLevel1 && (bestBid != null || bestAsk != null))
+			if (!fromLevel1 && !Adapter.Level1Extend && (bestBid != null || bestAsk != null))
 			{
 				var info = _entityCache.GetSecurityValues(security, time);
 
@@ -1383,6 +1393,12 @@ namespace StockSharp.Algo
 			{
 				info.SetValue(time, Level1Fields.LastTradeId, message.TradeId.Value);
 				changes.Add(new KeyValuePair<Level1Fields, object>(Level1Fields.LastTradeId, message.TradeId.Value));
+			}
+
+			if (!message.TradeStringId.IsEmpty())
+			{
+				info.SetValue(time, Level1Fields.LastTradeStringId, message.TradeStringId);
+				changes.Add(new KeyValuePair<Level1Fields, object>(Level1Fields.LastTradeStringId, message.TradeStringId));
 			}
 
 			if (message.TradeVolume != null)
@@ -1632,7 +1648,8 @@ namespace StockSharp.Algo
 				var subscription = tuple.Item1;
 				var candle = tuple.Item2;
 
-				RaiseCandleSeriesProcessing(subscription.CandleSeries, candle);
+				if (subscription.CandleSeries != null)
+					RaiseCandleSeriesProcessing(subscription.CandleSeries, candle);
 
 				CandleReceived?.Invoke(subscription, candle);
 				RaiseSubscriptionReceived(subscription, message);

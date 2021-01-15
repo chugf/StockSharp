@@ -23,12 +23,15 @@ namespace StockSharp.Algo
 	using Ecng.Collections;
 	using Ecng.Common;
 	using Ecng.ComponentModel;
+	using Ecng.Serialization;
 
 	using StockSharp.Algo.Candles;
 	using StockSharp.Algo.Storages;
+	using StockSharp.Algo.Strategies.Messages;
 	using StockSharp.BusinessEntities;
 	using StockSharp.Messages;
 	using StockSharp.Localization;
+	using StockSharp.Community;
 
 	/// <summary>
 	/// The auxiliary class for conversion of business-objects (<see cref="BusinessEntities"/>) into messages (<see cref="Messages"/>) and vice versa.
@@ -66,6 +69,8 @@ namespace StockSharp.Algo
 				Asks = depth.Asks2.ToArray(),
 				ServerTime = depth.LastChangeTime,
 				Currency = depth.Currency,
+				SeqNum = depth.SeqNum,
+				BuildFrom = depth.BuildFrom,
 			};
 		}
 
@@ -142,6 +147,8 @@ namespace StockSharp.Algo
 			message.Arg = candle.Arg;
 			message.PriceLevels = candle.PriceLevels?/*.Select(l => l.Clone())*/.ToArray();
 			message.State = candle.State;
+			message.SeqNum = candle.SeqNum;
+			message.BuildFrom = candle.BuildFrom;
 
 			return message;
 		}
@@ -184,6 +191,9 @@ namespace StockSharp.Algo
 				Slippage = trade.Slippage,
 				Commission = trade.Commission,
 				CommissionCurrency = trade.CommissionCurrency,
+				SeqNum = trade.Trade.SeqNum,
+				OrderBuyId = trade.Trade.OrderBuyId,
+				OrderSellId = trade.Trade.OrderSellId,
 			};
 		}
 
@@ -226,6 +236,7 @@ namespace StockSharp.Algo
 				Comment = order.Comment,
 				VisibleVolume = order.VisibleVolume,
 				Currency = order.Currency,
+				SeqNum = order.SeqNum,
 			};
 
 			return message;
@@ -261,6 +272,7 @@ namespace StockSharp.Algo
 				OrderState = OrderStates.Failed,
 				ServerTime = fail.ServerTime,
 				LocalTime = fail.LocalTime,
+				SeqNum = fail.SeqNum,
 			};
 		}
 
@@ -290,6 +302,11 @@ namespace StockSharp.Algo
 				OriginSide = trade.OrderDirection,
 				IsUpTick = trade.IsUpTick,
 				Currency = trade.Currency,
+				SeqNum = trade.SeqNum,
+				BuildFrom = trade.BuildFrom,
+				Yield = trade.Yield,
+				OrderBuyId = trade.OrderBuyId,
+				OrderSellId = trade.OrderSellId,
 			};
 		}
 
@@ -326,9 +343,18 @@ namespace StockSharp.Algo
 				ExpiryDate = order.ExpiryDate,
 				PortfolioName = order.Portfolio?.Name,
 				ExecutionType = ExecutionTypes.OrderLog,
-				TradeId = trade?.Id,
+				TradeId = trade?.Id.DefaultAsNull(),
+				TradeStringId = trade?.StringId,
 				TradePrice = trade?.Price,
 				Currency = order.Currency,
+				SeqNum = order.SeqNum,
+				OrderBuyId = trade?.OrderBuyId,
+				OrderSellId = trade?.OrderSellId,
+				TradeStatus = trade?.Status,
+				IsUpTick = trade?.IsUpTick,
+				Yield = trade?.Yield,
+				OpenInterest = trade?.OpenInterest,
+				OriginSide = trade?.OrderDirection,
 			};
 		}
 
@@ -383,11 +409,10 @@ namespace StockSharp.Algo
 		/// <param name="order">Order.</param>
 		/// <param name="securityId">Security ID.</param>
 		/// <param name="transactionId">The transaction number.</param>
-		/// <param name="volume">The volume been cancelled.</param>
 		/// <returns>Message.</returns>
-		public static OrderCancelMessage CreateCancelMessage(this Order order, SecurityId securityId, long transactionId, decimal? volume = null)
+		public static OrderCancelMessage CreateCancelMessage(this Order order, SecurityId securityId, long transactionId)
 		{
-			if (order == null)
+			if (order is null)
 				throw new ArgumentNullException(nameof(order));
 
 			var msg = new OrderCancelMessage
@@ -396,14 +421,16 @@ namespace StockSharp.Algo
 				OrderType = order.Type,
 				OriginalTransactionId = order.TransactionId,
 				TransactionId = transactionId,
-				OrderId = order.Id,
-				OrderStringId = order.StringId,
-				Volume = volume,
 				UserOrderId = order.UserOrderId,
 				StrategyId = order.StrategyId,
 				BrokerCode = order.BrokerCode,
 				ClientCode = order.ClientCode,
-				Side = order.Direction
+				OrderId = order.Id,
+				OrderStringId = order.StringId,
+				Balance = order.Balance,
+				Volume = order.Volume,
+				Side = order.Direction,
+				IsMargin = order.IsMargin,
 			};
 
 			order.Security.ToMessage(securityId).CopyTo(msg, false);
@@ -510,7 +537,7 @@ namespace StockSharp.Algo
 			if (security is null)
 				throw new ArgumentNullException(nameof(security));
 
-			if (security == TraderHelper.AllSecurity)
+			if (security.IsAllSecurity())
 			{
 				return new SecurityMessage();
 
@@ -693,6 +720,9 @@ namespace StockSharp.Algo
 		/// <returns><see cref="SecurityId"/> value.</returns>
 		public static SecurityId ToSecurityId(this string id, SecurityIdGenerator generator = null)
 		{
+			if (id.CompareIgnoreCase(TraderHelper.AllSecurity.Id))
+				return default;
+
 			return GetGenerator(generator).Split(id);
 		}
 
@@ -811,6 +841,7 @@ namespace StockSharp.Algo
 				SecurityId = position.Security.ToSecurityId(),
 				ClientCode = position.ClientCode,
 				StrategyId = position.StrategyId,
+				Side = position.Side,
 				OriginalTransactionId = originalTransactionId,
 			}
 			.TryAdd(PositionChangeTypes.BeginValue, position.BeginValue, true)
@@ -1069,9 +1100,8 @@ namespace StockSharp.Algo
 		/// <typeparam name="TCandle">The candle type.</typeparam>
 		/// <param name="messages">Messages.</param>
 		/// <param name="security">Security.</param>
-		/// <param name="candleType">The type of the candle. It is used, if <typeparamref name="TCandle" /> equals to <see cref="Candle"/>.</param>
 		/// <returns>Trading objects.</returns>
-		public static IEnumerable<TCandle> ToCandles<TCandle>(this IEnumerable<CandleMessage> messages, Security security, Type candleType = null)
+		public static IEnumerable<TCandle> ToCandles<TCandle>(this IEnumerable<CandleMessage> messages, Security security)
 		{
 			return new ToEntitiesEnumerable<CandleMessage, TCandle>(messages, security, null);
 		}
@@ -1240,6 +1270,8 @@ namespace StockSharp.Algo
 			candle.PriceLevels = message.PriceLevels?/*.Select(l => l.Clone())*/.ToArray();
 
 			candle.State = message.State;
+			candle.SeqNum = message.SeqNum;
+			candle.BuildFrom = message.BuildFrom;
 
 			return candle;
 		}
@@ -1280,6 +1312,11 @@ namespace StockSharp.Algo
 			trade.OrderDirection = message.OriginSide;
 			trade.IsUpTick = message.IsUpTick;
 			trade.Currency = message.Currency;
+			trade.SeqNum = message.SeqNum;
+			trade.BuildFrom = message.BuildFrom;
+			trade.Yield = message.Yield;
+			trade.OrderBuyId = message.OrderBuyId;
+			trade.OrderSellId = message.OrderSellId;
 
 			return trade;
 		}
@@ -1382,6 +1419,8 @@ namespace StockSharp.Algo
 
 			marketDepth.LocalTime = message.LocalTime;
 			marketDepth.Currency = message.Currency;
+			marketDepth.SeqNum = message.SeqNum;
+			marketDepth.BuildFrom = message.BuildFrom;
 
 			return marketDepth;
 		}
@@ -1437,6 +1476,7 @@ namespace StockSharp.Algo
 			order.TimeInForce = message.TimeInForce;
 			order.IsSystem = message.IsSystem;
 			order.Currency = message.Currency;
+			order.SeqNum = message.SeqNum;
 
 			order.ApplyNewState(message.OrderState ?? (message.TradeId != null ? OrderStates.Done : OrderStates.Active));
 
@@ -1444,12 +1484,19 @@ namespace StockSharp.Algo
 			{
 				var trade = item.Trade;
 
-				trade.Id = message.TradeId ?? 0;
-				trade.Price = message.TradePrice ?? 0;
+				trade.Id = message.TradeId ?? default;
+				trade.StringId = message.TradeStringId;
+				trade.Price = message.TradePrice ?? default;
 				trade.Time = message.ServerTime;
-				trade.Volume = message.OrderVolume ?? 0;
+				trade.Volume = message.OrderVolume ?? default;
 				trade.IsSystem = message.IsSystem;
 				trade.Status = message.TradeStatus;
+				trade.OrderBuyId = message.OrderBuyId;
+				trade.OrderSellId = message.OrderSellId;
+				trade.OrderDirection = message.OriginSide;
+				trade.OpenInterest = message.OpenInterest;
+				trade.IsUpTick = message.IsUpTick;
+				trade.Yield = message.Yield;
 			}
 
 			return item;
@@ -1479,6 +1526,7 @@ namespace StockSharp.Algo
 				Priority = news.Priority,
 				Language = news.Language,
 				ExpiryDate = news.ExpiryDate,
+				SeqNum = news.SeqNum,
 			};
 		}
 
@@ -1495,7 +1543,7 @@ namespace StockSharp.Algo
 			if (security == null)
 				throw new ArgumentNullException(nameof(security));
 
-			if (security == TraderHelper.AllSecurity)
+			if (security.IsAllSecurity())
 				return default;
 
 			string secCode;
@@ -1670,7 +1718,8 @@ namespace StockSharp.Algo
 				Security = message.SecurityId == null ? null : new Security
 				{
 					Id = message.SecurityId.Value.SecurityCode
-				}
+				},
+				SeqNum = message.SeqNum,
 			};
 		}
 
@@ -1792,7 +1841,7 @@ namespace StockSharp.Algo
 			}
 
 			mdMsg.ValidateBounds();
-			series.Security.ToMessage(copyExtendedId: true).CopyTo(mdMsg, false);
+			series.Security?.ToMessage(copyExtendedId: true).CopyTo(mdMsg, false);
 
 			return mdMsg;
 		}
@@ -1902,6 +1951,13 @@ namespace StockSharp.Algo
 		}
 
 		/// <summary>
+		/// Convert <see cref="DataType"/> to <see cref="Subscription"/> value.
+		/// </summary>
+		/// <param name="dataType">Data type info.</param>
+		/// <returns>Subscription.</returns>
+		public static Subscription ToSubscription(this DataType dataType) => new Subscription(dataType, (SecurityMessage)null);
+
+		/// <summary>
 		/// Convert <see cref="DataType"/> to <see cref="ISubscriptionMessage"/> value.
 		/// </summary>
 		/// <param name="dataType">Data type info.</param>
@@ -1915,6 +1971,8 @@ namespace StockSharp.Algo
 				return new SecurityLookupMessage();
 			else if (dataType == DataType.Board)
 				return new BoardLookupMessage();
+			else if (dataType == DataType.BoardState)
+				return new BoardLookupMessage();
 			else if (dataType == DataType.Users)
 				return new UserLookupMessage();
 			else if (dataType == DataType.TimeFrames)
@@ -1925,8 +1983,26 @@ namespace StockSharp.Algo
 				return new OrderStatusMessage();
 			else if (dataType == DataType.PositionChanges)
 				return new PortfolioLookupMessage();
+			else if (dataType == StrategyDataType.Info)
+				return new StrategyLookupMessage();
+			else if (dataType == StrategyDataType.State)
+				return new StrategyLookupMessage();
 			else if (dataType.IsPortfolio)
 				return new PortfolioMessage();
+			else if (dataType == DataType.SecurityLegs)
+				return new SecurityLegsRequestMessage();
+			else if (dataType == DataType.SecurityMapping)
+				return new SecurityMappingRequestMessage();
+			else if (dataType == DataType.SecurityRoute)
+				return new SecurityRouteListRequestMessage();
+			else if (dataType == DataType.PortfolioRoute)
+				return new PortfolioRouteListRequestMessage();
+			else if (dataType == DataType.Command)
+				return new CommandMessage();
+			else if (dataType == CommunityMessageTypes.ProductInfoType)
+				return new ProductLookupMessage();
+			else if (dataType == CommunityMessageTypes.ProductFeedbackType)
+				return new ProductLookupMessage();
 			else
 				throw new ArgumentOutOfRangeException(nameof(dataType), dataType, LocalizedStrings.Str1219);
 		}

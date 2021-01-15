@@ -6,11 +6,12 @@ namespace StockSharp.Messages
 	using System.Xml.Serialization;
 
 	using Ecng.Collections;
+	using Ecng.Serialization;
 
 	/// <summary>
 	/// Command types.
 	/// </summary>
-	[DataContract]
+	[System.Runtime.Serialization.DataContract]
 	[Serializable]
 	public enum CommandTypes
 	{
@@ -114,7 +115,7 @@ namespace StockSharp.Messages
 	/// <summary>
 	/// Command scopes.
 	/// </summary>
-	[DataContract]
+	[System.Runtime.Serialization.DataContract]
 	[Serializable]
 	public enum CommandScopes
 	{
@@ -159,13 +160,19 @@ namespace StockSharp.Messages
 		/// </summary>
 		[EnumMember]
 		FileGroup,
+
+		/// <summary>
+		/// Product.
+		/// </summary>
+		[EnumMember]
+		Product,
 	}
 
 	/// <summary>
 	/// The message contains information about command to change state.
 	/// </summary>
 	[Serializable]
-	[DataContract]
+	[System.Runtime.Serialization.DataContract]
 	public class CommandMessage : BaseRequestMessage
 	{
 		/// <summary>
@@ -203,12 +210,15 @@ namespace StockSharp.Messages
 		[DataMember]
 		public string ObjectId { get; set; }
 
+		[field: NonSerialized]
+		private IDictionary<string, Tuple<string, string>> _parameters = new Dictionary<string, Tuple<string, string>>();
+
 		/// <summary>
 		/// Parameters.
 		/// </summary>
-		[DataMember]
+		[Ignore]
 		[XmlIgnore]
-		public IDictionary<string, Tuple<string, string>> Parameters { get; } = new Dictionary<string, Tuple<string, string>>();
+		public IDictionary<string, Tuple<string, string>> Parameters => _parameters;
 
 		/// <summary>
 		/// Create a copy of <see cref="CommandMessage"/>.
@@ -239,7 +249,7 @@ namespace StockSharp.Messages
 		}
 
 		/// <inheritdoc />
-		public override DataType DataType => DataType.Create(typeof(CommandMessage), null);
+		public override DataType DataType => DataType.Command;
 
 		/// <inheritdoc />
 		public override string ToString()

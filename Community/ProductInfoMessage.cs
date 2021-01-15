@@ -2,6 +2,7 @@
 {
 	using System;
 	using System.Runtime.Serialization;
+	using System.Linq;
 
 	using Ecng.Common;
 
@@ -27,16 +28,40 @@
 		public string Name { get; set; }
 
 		/// <summary>
-		/// Description.
+		/// Description (en).
 		/// </summary>
 		[DataMember]
 		public string Description { get; set; }
+
+		/// <summary>
+		/// Description (ru).
+		/// </summary>
+		[DataMember]
+		public string DescriptionRu { get; set; }
+
+		/// <summary>
+		/// Full description (en).
+		/// </summary>
+		[DataMember]
+		public string FullDescriptionEn { get; set; }
+
+		/// <summary>
+		/// Full description (ru).
+		/// </summary>
+		[DataMember]
+		public string FullDescriptionRu { get; set; }
 
 		/// <summary>
 		/// Package id.
 		/// </summary>
 		[DataMember]
 		public string PackageId { get; set; }
+
+		/// <summary>
+		/// Repository.
+		/// </summary>
+		[DataMember]
+		public PackageRepositories Repository { get; set; }
 
 		/// <summary>
 		/// Tags.
@@ -51,10 +76,39 @@
 		public long Author { get; set; }
 
 		/// <summary>
-		/// Price.
+		/// Per month.
 		/// </summary>
 		[DataMember]
-		public Currency Price { get; set; }
+		public Currency MonthlyPrice { get; set; }
+
+		/// <summary>
+		/// Annual.
+		/// </summary>
+		[DataMember]
+		public Currency AnnualPrice { get; set; }
+
+		/// <summary>
+		/// Lifetime.
+		/// </summary>
+		[DataMember]
+		public Currency LifetimePrice { get; set; }
+
+		/// <summary>
+		/// Lifetime.
+		/// </summary>
+		[DataMember]
+		[Obsolete]
+		public Currency Price
+		{
+			get => LifetimePrice;
+			set => LifetimePrice = value;
+		}
+
+		/// <summary>
+		/// Price for renew.
+		/// </summary>
+		[DataMember]
+		public Currency RenewPrice { get; set; }
 
 		/// <summary>
 		/// Download count.
@@ -78,13 +132,63 @@
 		/// Product required connectors.
 		/// </summary>
 		[DataMember]
+		[Obsolete("Use SupportedPlugins property.")]
 		public bool IsRequiredConnectors { get; set; }
 
 		/// <summary>
-		/// Product required connectors.
+		/// Supported plugins.
+		/// </summary>
+		[DataMember]
+		public long? SupportedPlugins { get; set; }
+
+		/// <summary>
+		/// Content type.
 		/// </summary>
 		[DataMember]
 		public ProductContentTypes ContentType { get; set; }
+
+		/// <summary>
+		/// The picture identifier.
+		/// </summary>
+		[DataMember]
+		public long Picture { get; set; }
+
+		/// <summary>
+		/// Extra.
+		/// </summary>
+		[DataMember]
+		public string Extra { get; set; }
+
+		/// <summary>
+		/// Scope.
+		/// </summary>
+		[DataMember]
+		public ProductScopes Scope { get; set; }
+
+		/// <summary>
+		/// Type of <see cref="Price"/>.
+		/// </summary>
+		[DataMember]
+		[Obsolete("Use MonthlyPrice, AnnualPrice or LifetimePrice properties.")]
+		public ProductPriceTypes PriceType { get; set; }
+
+		/// <summary>
+		/// Latest version.
+		/// </summary>
+		[DataMember]
+		public string LatestVersion { get; set; }
+
+		/// <summary>
+		/// Is approved.
+		/// </summary>
+		[DataMember]
+		public bool IsApproved { get; set; }
+
+		/// <summary>
+		/// Stub versions.
+		/// </summary>
+		[DataMember]
+		public Tuple<string, string>[] StubVersions { get; set; }
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="ProductInfoMessage"/>.
@@ -122,15 +226,32 @@
 			destination.Id = Id;
 			destination.Name = Name;
 			destination.Description = Description;
+			destination.DescriptionRu = DescriptionRu;
+			destination.FullDescriptionEn = FullDescriptionEn;
+			destination.FullDescriptionRu = FullDescriptionRu;
 			destination.PackageId = PackageId;
+			destination.Repository = Repository;
 			destination.Tags = Tags;
 			destination.Author = Author;
-			destination.Price = Price?.Clone();
+			destination.MonthlyPrice = MonthlyPrice?.Clone();
+			destination.AnnualPrice = AnnualPrice?.Clone();
+			destination.LifetimePrice = LifetimePrice?.Clone();
+			destination.RenewPrice = RenewPrice?.Clone();
 			destination.DownloadCount = DownloadCount;
 			destination.Rating = Rating;
 			destination.DocUrl = DocUrl;
+#pragma warning disable CS0618 // Type or member is obsolete
 			destination.IsRequiredConnectors = IsRequiredConnectors;
+			destination.PriceType = PriceType;
+#pragma warning restore CS0618 // Type or member is obsolete
+			destination.SupportedPlugins = SupportedPlugins;
 			destination.ContentType = ContentType;
+			destination.Picture = Picture;
+			destination.Extra = Extra;
+			destination.Scope = Scope;
+			destination.LatestVersion = LatestVersion;
+			destination.IsApproved = IsApproved;
+			destination.StubVersions = StubVersions?.ToArray();
 		}
 
 		/// <inheritdoc />
@@ -148,7 +269,7 @@
 				str += $",Descr={Description}";
 
 			if (!PackageId.IsEmpty())
-				str += $",PackageId={PackageId}";
+				str += $",PackageId={PackageId},Repo={Repository}";
 
 			if (!Tags.IsEmpty())
 				str += $",Tags={Tags}";
@@ -156,8 +277,17 @@
 			if (Author != 0)
 				str += $",Author={Author}";
 
-			if (Price != null)
-				str += $",Price={Price}";
+			if (MonthlyPrice != null)
+				str += $",Monthly={MonthlyPrice}";
+
+			if (AnnualPrice != null)
+				str += $",Annual={AnnualPrice}";
+
+			if (LifetimePrice != null)
+				str += $",Life={LifetimePrice}";
+
+			if (RenewPrice != null)
+				str += $",Renew={RenewPrice}";
 
 			str += $",Downloads={DownloadCount}";
 
@@ -167,7 +297,22 @@
 			if (!DocUrl.IsEmpty())
 				str += $",Doc={DocUrl}";
 
-			str += $",Connectors={IsRequiredConnectors},Content={ContentType}";
+			if (Picture != default)
+				str += $",Picture={Picture}";
+
+			str += $",Content={ContentType}";
+
+			if (SupportedPlugins != null)
+				str += $",Supported={SupportedPlugins.Value}";
+
+			if (!Extra.IsEmpty())
+				str += $",Extra={Extra}";
+
+			if (!LatestVersion.IsEmpty())
+				str += $",Ver={LatestVersion}";
+
+			if (!IsApproved)
+				str += $",Approved={IsApproved}";
 
 			return str;
 		}

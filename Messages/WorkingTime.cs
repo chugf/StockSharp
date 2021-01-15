@@ -36,7 +36,7 @@ namespace StockSharp.Messages
 	[System.Runtime.Serialization.DataContract]
 	[DisplayNameLoc(LocalizedStrings.Str184Key)]
 	[DescriptionLoc(LocalizedStrings.Str408Key)]
-	public class WorkingTime : Cloneable<WorkingTime>, IPersistable
+	public class WorkingTime : IPersistable
 	{
 		/// <summary>
 		/// Initializes a new instance of the <see cref="WorkingTime"/>.
@@ -44,6 +44,17 @@ namespace StockSharp.Messages
 		public WorkingTime()
 		{
         }
+
+		/// <summary>
+		/// Is enabled.
+		/// </summary>
+		[Display(
+			ResourceType = typeof(LocalizedStrings),
+			Name = LocalizedStrings.Str2229Key,
+			Description = LocalizedStrings.Str2230Key,
+			GroupName = LocalizedStrings.GeneralKey,
+			Order = 0)]
+		public bool IsEnabled { get; set; }
 
 		private List<WorkingTimePeriod> _periods = new List<WorkingTimePeriod>();
 
@@ -56,22 +67,23 @@ namespace StockSharp.Messages
 			Name = LocalizedStrings.Str409Key,
 			Description = LocalizedStrings.Str410Key,
 			GroupName = LocalizedStrings.GeneralKey,
-			Order = 0)]
+			Order = 1)]
 		public List<WorkingTimePeriod> Periods
 		{
 			get => _periods;
 			set => _periods = value ?? throw new ArgumentNullException(nameof(value));
 		}
 
-		//private List<DateTime> _specialWorkingDays = new List<DateTime>();
-
 		/// <summary>
 		/// Working days, falling on Saturday and Sunday.
 		/// </summary>
+		//[Display(
+		//	ResourceType = typeof(LocalizedStrings),
+		//	Name = LocalizedStrings.Str411Key,
+		//	Description = LocalizedStrings.Str412Key,
+		//	GroupName = LocalizedStrings.GeneralKey,
+		//	Order = 2)]
 		//[DataMember]
-		//[CategoryLoc(LocalizedStrings.GeneralKey)]
-		//[DisplayNameLoc(LocalizedStrings.Str411Key)]
-		//[DescriptionLoc(LocalizedStrings.Str412Key)]
 		[XmlIgnore]
 		[Ignore]
 		[Browsable(false)]
@@ -91,15 +103,16 @@ namespace StockSharp.Messages
 			}
 		}
 
-		//private List<DateTime> _specialHolidays = new List<DateTime>();
-
 		/// <summary>
 		/// Holidays that fall on workdays.
 		/// </summary>
 		//[DataMember]
-		//[CategoryLoc(LocalizedStrings.GeneralKey)]
-		//[DisplayNameLoc(LocalizedStrings.Str413Key)]
-		//[DescriptionLoc(LocalizedStrings.Str414Key)]
+		//[Display(
+		//	ResourceType = typeof(LocalizedStrings),
+		//	Name = LocalizedStrings.Str413Key,
+		//	Description = LocalizedStrings.Str414Key,
+		//	GroupName = LocalizedStrings.GeneralKey,
+		//	Order = 3)]
 		[XmlIgnore]
 		[Ignore]
 		[Browsable(false)]
@@ -108,8 +121,6 @@ namespace StockSharp.Messages
 			get => _specialDays.Where(p => p.Value.Length == 0).Select(p => p.Key).ToArray();
 			set
 			{
-				//_specialHolidays = CheckDates(value);
-
 				foreach (var day in CheckDates(value))
 					_specialDays[day] = ArrayHelper.Empty<Range<TimeSpan>>();
 			}
@@ -126,7 +137,7 @@ namespace StockSharp.Messages
 			Name = LocalizedStrings.SpecialDaysKey,
 			Description = LocalizedStrings.SpecialDaysDescKey,
 			GroupName = LocalizedStrings.GeneralKey,
-			Order = 1)]
+			Order = 2)]
 		[XmlIgnore]
 		public IDictionary<DateTime, Range<TimeSpan>[]> SpecialDays
 		{
@@ -141,7 +152,7 @@ namespace StockSharp.Messages
 			if (!_checkDates)
 				return dates;
 
-			if (dates == null)
+			if (dates is null)
 				throw new ArgumentNullException(nameof(dates));
 
 			var dupDate = dates.GroupBy(d => d).FirstOrDefault(g => g.Count() > 1);
@@ -153,41 +164,31 @@ namespace StockSharp.Messages
 		}
 
 		/// <summary>
-		/// Create a copy of <see cref="WorkingTime"/>.
-		/// </summary>
-		/// <returns>Copy.</returns>
-		public override WorkingTime Clone()
-		{
-			var clone = new WorkingTime
-			{
-				_checkDates = false,
-				Periods = Periods.Select(t => t.Clone()).ToList(),
-				//SpecialWorkingDays = SpecialWorkingDays.ToList(),
-				//SpecialHolidays = SpecialHolidays.ToList(),
-				SpecialDays = SpecialDays.ToDictionary(p => p.Key, p => p.Value.ToArray()),
-			};
-
-			clone._checkDates = true;
-
-			return clone;
-		}
-
-		/// <summary>
 		/// Load settings.
 		/// </summary>
 		/// <param name="storage">Settings storage.</param>
 		public void Load(SettingsStorage storage)
 		{
-			Periods = storage.GetValue<IEnumerable<SettingsStorage>>(nameof(Periods)).Select(s => s.Load<WorkingTimePeriod>()).ToList();
+			_checkDates = false;
 
-			if (storage.ContainsKey(nameof(SpecialDays)))
+			try
 			{
-				SpecialDays = storage.GetValue<IDictionary<DateTime, Range<TimeSpan>[]>>(nameof(SpecialDays));
+				IsEnabled = storage.GetValue(nameof(IsEnabled), IsEnabled);
+				Periods = storage.GetValue<IEnumerable<SettingsStorage>>(nameof(Periods)).Select(s => s.Load<WorkingTimePeriod>()).ToList();
+
+				if (storage.ContainsKey(nameof(SpecialDays)))
+				{
+					SpecialDays = storage.GetValue<IDictionary<DateTime, Range<TimeSpan>[]>>(nameof(SpecialDays));
+				}
+				else
+				{
+					SpecialWorkingDays = storage.GetValue<List<DateTime>>(nameof(SpecialWorkingDays)).ToArray();
+					SpecialHolidays = storage.GetValue<List<DateTime>>(nameof(SpecialHolidays)).ToArray();
+				}
 			}
-			else
+			finally
 			{
-				SpecialWorkingDays = storage.GetValue<List<DateTime>>(nameof(SpecialWorkingDays)).ToArray();
-				SpecialHolidays = storage.GetValue<List<DateTime>>(nameof(SpecialHolidays)).ToArray();
+				_checkDates = true;
 			}
 		}
 
@@ -197,6 +198,7 @@ namespace StockSharp.Messages
 		/// <param name="storage">Settings storage.</param>
 		public void Save(SettingsStorage storage)
 		{
+			storage.SetValue(nameof(IsEnabled), IsEnabled);
 			storage.SetValue(nameof(Periods), Periods.Select(p => p.Save()).ToArray());
 			storage.SetValue(nameof(SpecialDays), SpecialDays);
 			//storage.SetValue(nameof(SpecialWorkingDays), SpecialWorkingDays);
@@ -204,9 +206,6 @@ namespace StockSharp.Messages
 		}
 
 		/// <inheritdoc />
-		public override string ToString()
-		{
-			return Periods.Select(p => p.ToString()).JoinComma();
-		}
+		public override string ToString() => Periods.Select(p => p.ToString()).JoinComma();
 	}
 }

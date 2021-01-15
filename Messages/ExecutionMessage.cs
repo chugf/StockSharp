@@ -64,7 +64,7 @@ namespace StockSharp.Messages
 	[Serializable]
 	[System.Runtime.Serialization.DataContract]
 	public class ExecutionMessage : BaseSubscriptionIdMessage<ExecutionMessage>,
-		ITransactionIdMessage, IServerTimeMessage, ISecurityIdMessage,
+		ITransactionIdMessage, IServerTimeMessage, ISecurityIdMessage, ISeqNumMessage,
 		IPortfolioNameMessage, IErrorMessage, IStrategyIdMessage, IGeneratedMessage
 	{
 		/// <inheritdoc />
@@ -372,7 +372,7 @@ namespace StockSharp.Messages
 		/// Deal initiator (seller or buyer).
 		/// </summary>
 		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.Str148Key)]
+		[DisplayNameLoc(LocalizedStrings.InitiatorKey)]
 		[DescriptionLoc(LocalizedStrings.Str149Key)]
 		[MainCategory]
 		[Nullable]
@@ -552,10 +552,7 @@ namespace StockSharp.Messages
 		[DataMember]
 		public bool? Initiator { get; set; }
 
-		/// <summary>
-		/// Sequence number.
-		/// </summary>
-		/// <remarks>Zero means no information.</remarks>
+		/// <inheritdoc />
 		[DataMember]
 		public long SeqNum { get; set; }
 
@@ -568,6 +565,18 @@ namespace StockSharp.Messages
 		/// </summary>
 		[DataMember]
 		public int? Leverage { get; set; }
+
+		/// <summary>
+		/// Order id (buy).
+		/// </summary>
+		[DataMember]
+		public long? OrderBuyId { get; set; }
+
+		/// <summary>
+		/// Order id (sell).
+		/// </summary>
+		[DataMember]
+		public long? OrderSellId { get; set; }
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="ExecutionMessage"/>.
@@ -597,11 +606,17 @@ namespace StockSharp.Messages
 			if (Initiator != null)
 				str += $",Initiator={Initiator.Value}";
 
-			if (SeqNum != 0)
+			if (SeqNum != default)
 				str += $",SeqNum={SeqNum}";
 
 			if (Leverage != null)
 				str += $",Leverage={Leverage.Value}";
+
+			if (OrderBuyId != null)
+				str += $",buy (id)={OrderBuyId.Value}";
+
+			if (OrderSellId != null)
+				str += $",sell (id)={OrderSellId.Value}";
 
 			return str;
 		}
@@ -679,6 +694,8 @@ namespace StockSharp.Messages
 			destination.SeqNum = SeqNum;
 			destination.BuildFrom = BuildFrom;
 			destination.Leverage = Leverage;
+			destination.OrderBuyId = OrderBuyId;
+			destination.OrderSellId = OrderSellId;
 		}
 	}
 }

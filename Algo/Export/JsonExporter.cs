@@ -48,6 +48,12 @@
 				if (depth.State != null)
 					writer.WriteProperty("st", depth.State.Value);
 
+				if (depth.HasPositions)
+					writer.WriteProperty("pos", true);
+
+				if (depth.SeqNum != default)
+					writer.WriteProperty("sn", depth.SeqNum);
+
 				void WriteQuotes(string name, QuoteChange[] quotes)
 				{
 					writer.WritePropertyName(name);
@@ -97,6 +103,9 @@
 					.WriteProperty("s", message.ServerTime.UtcDateTime)
 					.WriteProperty("l", message.LocalTime.UtcDateTime);
 
+				if (message.SeqNum != default)
+					writer.WriteProperty("sn", message.SeqNum);
+
 				foreach (var pair in message.Changes)
 					writer.WriteProperty(pair.Key.ToString(), pair.Value);
 			});
@@ -119,6 +128,9 @@
 
 				if (candle.OpenInterest != null)
 					writer.WriteProperty("oi", candle.OpenInterest.Value);
+
+				if (candle.SeqNum != default)
+					writer.WriteProperty("sn", candle.SeqNum);
 
 				if (candle.PriceLevels != null)
 				{
@@ -182,6 +194,9 @@
 
 				if (!n.Story.IsEmpty())
 					writer.WriteProperty("story", n.Story);
+
+				if (n.SeqNum != default)
+					writer.WriteProperty("sn", n.SeqNum);
 			});
 		}
 
@@ -313,7 +328,9 @@
 					.WriteProperty("client", message.ClientCode)
 					.WriteProperty("depo", message.DepoName)
 					.WriteProperty("limit", message.LimitType)
-					.WriteProperty("strategyId", message.StrategyId);
+					.WriteProperty("strategyId", message.StrategyId)
+					.WriteProperty("side", message.Side)
+					;
 
 				foreach (var pair in message.Changes.Where(c => !c.Key.IsObsolete()))
 					writer.WriteProperty(pair.Key.ToString(), pair.Value);
@@ -349,6 +366,9 @@
 					.WriteProperty("tif", item.TimeInForce)
 					.WriteProperty("sys", item.IsSystem);
 
+				if (item.SeqNum != default)
+					writer.WriteProperty("sn", item.SeqNum);
+
 				if (item.TradePrice != null)
 				{
 					writer.WriteProperty("tid", item.TradeId == null ? item.TradeStringId : item.TradeId.To<string>());
@@ -383,6 +403,18 @@
 
 				if (trade.Currency != null)
 					writer.WriteProperty("cur", trade.Currency.Value);
+
+				if (trade.SeqNum != default)
+					writer.WriteProperty("sn", trade.SeqNum);
+
+				if (trade.Yield != default)
+					writer.WriteProperty("yield", trade.Yield);
+
+				if (trade.OrderBuyId != default)
+					writer.WriteProperty("buy", trade.OrderBuyId);
+
+				if (trade.OrderSellId != default)
+					writer.WriteProperty("sell", trade.OrderSellId);
 			});
 		}
 
@@ -439,7 +471,7 @@
 					.WriteProperty("positionEffect", item.PositionEffect)
 					.WriteProperty("postOnly", item.PostOnly)
 					.WriteProperty("initiator", item.Initiator)
-					.WriteProperty("seqNum", item.SeqNum)
+					.WriteProperty("sn", item.SeqNum)
 					.WriteProperty("leverage", item.Leverage);
 			});
 		}

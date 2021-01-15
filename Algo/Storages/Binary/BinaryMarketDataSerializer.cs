@@ -37,6 +37,7 @@ namespace StockSharp.Algo.Storages.Binary
 		public static readonly Version Version33 = new Version(3, 3);
 		public static readonly Version Version34 = new Version(3, 4);
 		public static readonly Version Version35 = new Version(3, 5);
+		public static readonly Version Version36 = new Version(3, 6);
 		public static readonly Version Version40 = new Version(4, 0);
 		public static readonly Version Version41 = new Version(4, 1);
 		public static readonly Version Version42 = new Version(4, 2);
@@ -66,6 +67,7 @@ namespace StockSharp.Algo.Storages.Binary
 		public static readonly Version Version66 = new Version(6, 6);
 		public static readonly Version Version67 = new Version(6, 7);
 		public static readonly Version Version68 = new Version(6, 8);
+		public static readonly Version Version69 = new Version(6, 9);
 	}
 
 	abstract class BinaryMetaInfo : MetaInfo
@@ -105,6 +107,9 @@ namespace StockSharp.Algo.Storages.Binary
 		public TimeSpan LastItemLocalOffset { get; set; }
 		public DateTime FirstItemLocalTime { get; set; }
 		public DateTime LastItemLocalTime { get; set; }
+
+		public long FirstSeqNum { get; set; }
+		public long PrevSeqNum { get; set; }
 
 		public override object LastId
 		{
@@ -257,6 +262,18 @@ namespace StockSharp.Algo.Storages.Binary
 			LastServerOffset = stream.Read<TimeSpan>();
 		}
 
+		protected void WriteSeqNums(Stream stream)
+		{
+			stream.WriteEx(FirstSeqNum);
+			stream.WriteEx(PrevSeqNum);
+		}
+
+		protected void ReadSeqNums(Stream stream)
+		{
+			FirstSeqNum = stream.Read<long>();
+			PrevSeqNum = stream.Read<long>();
+		}
+
 		protected void WriteItemLocalOffset(Stream stream, Version minVersion)
 		{
 			if (Version < minVersion)
@@ -329,6 +346,9 @@ namespace StockSharp.Algo.Storages.Binary
 			LastPriceStep = src.LastPriceStep;
 			FirstPrice = src.FirstPrice;
 			LastPrice = src.LastPrice;
+
+			FirstSeqNum = src.FirstSeqNum;
+			PrevSeqNum = src.PrevSeqNum;
 		}
 	}
 

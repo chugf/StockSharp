@@ -99,7 +99,7 @@ namespace StockSharp.BusinessEntities
 			set
 			{
 				_story = value;
-				NotifyChanged(nameof(Story));
+				NotifyChanged();
 			}
 		}
 
@@ -170,6 +170,13 @@ namespace StockSharp.BusinessEntities
 		/// </summary>
 		[DataMember]
 		public DateTimeOffset? ExpiryDate { get; set; }
+
+		/// <summary>
+		/// Sequence number.
+		/// </summary>
+		/// <remarks>Zero means no information.</remarks>
+		[DataMember]
+		public long SeqNum { get; set; }
 
 		/// <inheritdoc />
 		public override string ToString()

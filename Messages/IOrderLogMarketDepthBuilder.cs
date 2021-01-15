@@ -20,6 +20,7 @@ namespace StockSharp.Messages
 	using System.Linq;
 
 	using Ecng.Collections;
+	using Ecng.Common;
 
 	using StockSharp.Localization;
 
@@ -28,6 +29,11 @@ namespace StockSharp.Messages
 	/// </summary>
 	public interface IOrderLogMarketDepthBuilder
 	{
+		/// <summary>
+		/// Snapshot.
+		/// </summary>
+		QuoteChangeMessage Snapshot { get; }
+
 		/// <summary>
 		/// Process order log item.
 		/// </summary>
@@ -41,7 +47,8 @@ namespace StockSharp.Messages
 	/// </summary>
 	public class OrderLogMarketDepthBuilder : IOrderLogMarketDepthBuilder
 	{
-		private readonly Dictionary<long, decimal> _orders = new Dictionary<long, decimal>();
+		private readonly Dictionary<long, decimal> _ordersByNum = new Dictionary<long, decimal>();
+		private readonly Dictionary<string, decimal> _ordersByString = new Dictionary<string, decimal>(StringComparer.InvariantCultureIgnoreCase);
 
 		private readonly SortedList<decimal, QuoteChange> _bids = new SortedList<decimal, QuoteChange>(new BackwardComparer<decimal>());
 		private readonly SortedList<decimal, QuoteChange> _asks = new SortedList<decimal, QuoteChange>();
@@ -70,6 +77,7 @@ namespace StockSharp.Messages
 				throw new ArgumentException(LocalizedStrings.Str942, nameof(depth));
 
 			_depth = depth;
+			_depth.State = QuoteChangeStates.SnapshotComplete;
 
 			foreach (var bid in depth.Bids)
 				_bids.Add(bid.Price, bid);
@@ -80,6 +88,8 @@ namespace StockSharp.Messages
 			_depth.Bids = _bids.Values.ToArray();
 			_depth.Asks = _asks.Values.ToArray();
 		}
+
+		QuoteChangeMessage IOrderLogMarketDepthBuilder.Snapshot => _depth.TypedClone();
 
 		QuoteChangeMessage IOrderLogMarketDepthBuilder.Update(ExecutionMessage item)
 		{
@@ -92,103 +102,123 @@ namespace StockSharp.Messages
 			if (item.OrderPrice == 0)
 				return null;
 
-			var changed = false;
+			_depth.ServerTime = item.ServerTime;
+			_depth.LocalTime = item.LocalTime;
+
+			QuoteChange? changedQuote = null;
 
 			var quotes = item.Side == Sides.Buy ? _bids : _asks;
 
-			try
+			if (item.IsOrderLogRegistered())
 			{
-				if (item.IsOrderLogRegistered())
+				if (item.OrderVolume != null)
 				{
-					if (item.OrderId != null)
+					QuoteChange ProcessRegister<T>(T id, Dictionary<T, decimal> orders)
 					{
 						var quote = quotes.SafeAdd(item.OrderPrice, key => new QuoteChange(key, 0));
-						var id = item.OrderId.Value;
 
-						if (item.OrderVolume != null)
+						var volume = item.OrderVolume.Value;
+
+						if (orders.TryGetValue(id, out var prevVolume))
 						{
-							var volume = item.OrderVolume.Value;
-
-							if (_orders.TryGetValue(id, out var prevVolume))
-							{
-								quote.Volume += (volume - prevVolume);
-								_orders[id] = volume;
-							}
-							else
-							{
-								quote.Volume += volume;
-								_orders.Add(id, volume);
-							}
-
-							quotes[item.OrderPrice] = quote;
-							changed = true;
+							quote.Volume += (volume - prevVolume);
+							orders[id] = volume;
 						}
-					}
-				}
-				else if (item.IsOrderLogMatched())
-				{
-					if (item.OrderId != null)
-					{
-						var id = item.OrderId.Value;
-						var volume = item.TradeVolume ?? item.OrderVolume;
-
-						if (volume != null)
+						else
 						{
-							if (_orders.TryGetValue(id, out var prevVolume))
-							{
-								if (quotes.TryGetValue(item.OrderPrice, out var quote))
-								{
-									quote.Volume -= volume.Value;
-
-									if (quote.Volume <= 0)
-										quotes.Remove(item.OrderPrice);
-
-									quotes[item.OrderPrice] = quote;
-								}
-
-								_orders[id] = prevVolume - volume.Value;
-								changed = true;
-							}
+							quote.Volume += volume;
+							orders.Add(id, volume);
 						}
-					}
-				}
-				else if (item.IsOrderLogCanceled())
-				{
-					if (item.OrderId != null)
-					{
-						var id = item.OrderId.Value;
 
-						if (_orders.TryGetValue(id, out var prevVolume))
+						quotes[item.OrderPrice] = quote;
+						return quote;
+					}
+				
+					if (item.OrderId != null)
+						changedQuote = ProcessRegister(item.OrderId.Value, _ordersByNum);
+					else if (!item.OrderStringId.IsEmpty())
+						changedQuote = ProcessRegister(item.OrderStringId, _ordersByString);
+				}
+			}
+			else if (item.IsOrderLogMatched())
+			{
+				var volume = item.TradeVolume ?? item.OrderVolume;
+
+				if (volume != null)
+				{
+					QuoteChange? ProcessMatched<T>(T id, Dictionary<T, decimal> orders)
+					{
+						if (orders.TryGetValue(id, out var prevVolume))
 						{
+							orders[id] = prevVolume - volume.Value;
+								
 							if (quotes.TryGetValue(item.OrderPrice, out var quote))
 							{
-								quote.Volume -= prevVolume;
+								quote.Volume -= volume.Value;
 
 								if (quote.Volume <= 0)
 									quotes.Remove(item.OrderPrice);
 
 								quotes[item.OrderPrice] = quote;
+								return quote;
 							}
+						}
 
-							_orders.Remove(id);
-							changed = true;
+						return null;
+					}
+
+					if (item.OrderId != null)
+						changedQuote = ProcessMatched(item.OrderId.Value, _ordersByNum);
+					else if (!item.OrderStringId.IsEmpty())
+						changedQuote = ProcessMatched(item.OrderStringId, _ordersByString);
+				}
+			}
+			else if (item.IsOrderLogCanceled())
+			{
+				QuoteChange? ProcessCanceled<T>(T id, Dictionary<T, decimal> orders)
+				{
+					if (orders.TryGetAndRemove(id, out var prevVolume))
+					{
+						if (quotes.TryGetValue(item.OrderPrice, out var quote))
+						{
+							quote.Volume -= prevVolume;
+
+							if (quote.Volume <= 0)
+								quotes.Remove(item.OrderPrice);
+
+							quotes[item.OrderPrice] = quote;
+							return quote;
 						}
 					}
+
+					return null;
 				}
+
+				if (item.OrderId != null)
+					changedQuote = ProcessCanceled(item.OrderId.Value, _ordersByNum);
+				else if (!item.OrderStringId.IsEmpty())
+					changedQuote = ProcessCanceled(item.OrderStringId, _ordersByString);
 			}
-			finally
+
+			if (changedQuote == null)
+				return null;
+
+			var increment = new QuoteChangeMessage
 			{
-				if (changed)
-				{
-					_depth.ServerTime = item.ServerTime;
-					_depth.LocalTime = item.LocalTime;
+				ServerTime = item.ServerTime,
+				LocalTime = item.LocalTime,
+				SecurityId = _depth.SecurityId,
+				State = QuoteChangeStates.Increment,
+			};
 
-					_depth.Bids = _bids.Values.ToArray();
-					_depth.Asks = _asks.Values.ToArray();
-				}
-			}
+			var q = changedQuote.Value;
 
-			return changed ? _depth : null;
+			if (item.Side == Sides.Buy)
+				increment.Bids = new[] { q };
+			else
+				increment.Asks = new[] { q };
+
+			return increment;
 		}
 	}
 }

@@ -54,14 +54,24 @@ namespace StockSharp.Algo.Storages.Csv
 				data.OrderId.ToString(),
 				data.OrderPrice.ToString(),
 				data.OrderVolume.ToString(),
-				data.Side.ToString(),
-				data.OrderState.ToString(),
-				data.TimeInForce.ToString(),
+				data.Side.To<int?>().ToString(),
+				data.OrderState.To<int?>().ToString(),
+				data.TimeInForce.To<int?>().ToString(),
 				data.TradeId.ToString(),
 				data.TradePrice.ToString(),
 				data.PortfolioName,
-				data.IsSystem.ToString(),
+				data.IsSystem.To<int?>().ToString(),
 				data.Balance.ToString(),
+				data.SeqNum.DefaultAsNull().ToString(),
+				data.OrderStringId,
+				data.TradeStringId,
+				data.OrderBuyId.ToString(),
+				data.OrderSellId.ToString(),
+				data.IsUpTick.To<int?>().ToString(),
+				data.Yield.ToString(),
+				data.TradeStatus.ToString(),
+				data.OpenInterest.ToString(),
+				data.OriginSide.To<int?>().ToString(),
 			});
 
 			metaInfo.LastTime = data.ServerTime.UtcDateTime;
@@ -77,7 +87,7 @@ namespace StockSharp.Algo.Storages.Csv
 				ExecutionType = ExecutionTypes.OrderLog,
 				ServerTime = reader.ReadTime(metaInfo.Date),
 				TransactionId = reader.ReadLong(),
-				OrderId = reader.ReadLong(),
+				OrderId = reader.ReadNullableLong(),
 				OrderPrice = reader.ReadDecimal(),
 				OrderVolume = reader.ReadDecimal(),
 				Side = reader.ReadEnum<Sides>(),
@@ -91,6 +101,24 @@ namespace StockSharp.Algo.Storages.Csv
 
 			if ((reader.ColumnCurr + 1) < reader.ColumnCount)
 				ol.Balance = reader.ReadNullableDecimal();
+
+			if ((reader.ColumnCurr + 1) < reader.ColumnCount)
+				ol.SeqNum = reader.ReadNullableLong() ?? 0L;
+
+			if ((reader.ColumnCurr + 1) < reader.ColumnCount)
+			{
+				ol.OrderStringId = reader.ReadString();
+				ol.TradeStringId = reader.ReadString();
+
+				ol.OrderBuyId = reader.ReadNullableLong();
+				ol.OrderSellId = reader.ReadNullableLong();
+
+				ol.IsUpTick = reader.ReadNullableBool();
+				ol.Yield = reader.ReadNullableDecimal();
+				ol.TradeStatus = reader.ReadNullableInt();
+				ol.OpenInterest = reader.ReadNullableDecimal();
+				ol.OriginSide = reader.ReadNullableEnum<Sides>();
+			}
 
 			return ol;
 		}

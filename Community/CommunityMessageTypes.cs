@@ -5,7 +5,7 @@
 	/// <summary>
 	/// Extended <see cref="MessageTypes"/>.
 	/// </summary>
-	public class CommunityMessageTypes
+	public static class CommunityMessageTypes
 	{
 		/// <summary>
 		/// <see cref="FileInfoMessage"/>.
@@ -27,7 +27,59 @@
 		/// </summary>
 		public const MessageTypes ProductFeedback = (MessageTypes)(-11003);
 
-		internal static DataType ProductInfoType = DataType.Create(typeof(ProductInfoMessage), null).Immutable();
-		internal static DataType ProductFeedbackType = DataType.Create(typeof(ProductFeedbackMessage), null).Immutable();
+		/// <summary>
+		/// <see cref="ProductFeedbackLookupMessage"/>.
+		/// </summary>
+		public const MessageTypes ProductFeedbackLookup = (MessageTypes)(-11004);
+
+		/// <summary>
+		/// <see cref="ProductPermissionLookupMessage"/>.
+		/// </summary>
+		public const MessageTypes ProductPermissionLookup = (MessageTypes)(-11005);
+
+		/// <summary>
+		/// <see cref="ProductPermissionMessage"/>.
+		/// </summary>
+		public const MessageTypes ProductPermission = (MessageTypes)(-11006);
+
+		/// <summary>
+		/// <see cref="ProductPublishMessage"/>.
+		/// </summary>
+		public const MessageTypes ProductPublish = (MessageTypes)(-11007);
+
+		/// <summary>
+		/// <see cref="LicenseLookupMessage"/>.
+		/// </summary>
+		public const MessageTypes LicenseLookup = (MessageTypes)(-10000);
+
+		/// <summary>
+		/// <see cref="LicenseRequestMessage"/>.
+		/// </summary>
+		public const MessageTypes LicenseRequest = (MessageTypes)(-10001);
+
+		/// <summary>
+		/// <see cref="LicenseInfoMessage"/>.
+		/// </summary>
+		public const MessageTypes LicenseInfo = (MessageTypes)(-10002);
+
+		/// <summary>
+		/// <see cref="ProductInfoMessage"/>.
+		/// </summary>
+		public static DataType ProductInfoType = DataType.Create(typeof(ProductInfoMessage), null).Immutable();
+
+		/// <summary>
+		/// <see cref="ProductFeedbackMessage"/>.
+		/// </summary>
+		public static DataType ProductFeedbackType = DataType.Create(typeof(ProductFeedbackMessage), null).Immutable();
+
+		/// <summary>
+		/// <see cref="ProductPermissionMessage"/>.
+		/// </summary>
+		public static DataType ProductPermissionType = DataType.Create(typeof(ProductPermissionMessage), null).Immutable();
+
+		/// <summary>
+		/// <see cref="LicenseInfoMessage"/>.
+		/// </summary>
+		public static DataType LicenseInfoType = DataType.Create(typeof(LicenseInfoMessage), null).Immutable();
 	}
 }
