@@ -1,129 +1,90 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Risk;
 
-Project: StockSharp.Algo.Risk.Algo
-File: RiskMessageAdapter.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Risk
+/// <summary>
+/// The message adapter, automatically controlling risk rules.
+/// </summary>
+public class RiskMessageAdapter : MessageAdapterWrapper
 {
-	using System;
-
-	using Ecng.Common;
-	using Ecng.ComponentModel;
-	using Ecng.Serialization;
-
-	using StockSharp.Localization;
-	using StockSharp.Logging;
-	using StockSharp.Messages;
+	private readonly IRiskManager _riskManager;
 
 	/// <summary>
-	/// The message adapter, automatically controlling risk rules.
+	/// Initializes a new instance of the <see cref="RiskMessageAdapter"/>.
 	/// </summary>
-	public class RiskMessageAdapter : MessageAdapterWrapper
+	/// <param name="innerAdapter">The adapter, to which messages will be directed.</param>
+	/// <param name="riskManager">Risk control manager.</param>
+	public RiskMessageAdapter(IMessageAdapter innerAdapter, IRiskManager riskManager)
+		: base(innerAdapter)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="RiskMessageAdapter"/>.
-		/// </summary>
-		/// <param name="innerAdapter">The adapter, to which messages will be directed.</param>
-		public RiskMessageAdapter(IMessageAdapter innerAdapter)
-			: base(innerAdapter)
-		{
-		}
+		_riskManager = riskManager ?? throw new ArgumentNullException(nameof(riskManager));
 
-		private IRiskManager _riskManager = new RiskManager();
+		if (_riskManager.Parent != null)
+			_riskManager.Parent = this;
+	}
 
-		/// <summary>
-		/// Risk control manager.
-		/// </summary>
-		public IRiskManager RiskManager
+	/// <inheritdoc />
+	public override bool SendInMessage(Message message)
+	{
+		if (message.IsBack())
 		{
-			get => _riskManager;
-			set
+			if (message.Adapter == this)
 			{
-				_riskManager = value ?? throw new ArgumentNullException(nameof(value));
+				message.UndoBack();
 
-				if (_riskManager.Parent != null)
-					_riskManager.Parent = this;
+				return base.OnSendInMessage(message);
 			}
 		}
 
-		/// <inheritdoc />
-		public override bool SendInMessage(Message message)
-		{
-			if (message.IsBack())
-			{
-				if (message.Adapter == this)
-				{
-					message.UndoBack();
+		return base.SendInMessage(message);
+	}
 
-					return base.OnSendInMessage(message);
-				}
-			}
+	/// <inheritdoc />
+	protected override bool OnSendInMessage(Message message)
+	{
+		ProcessRisk(message);
+		
+		return base.OnSendInMessage(message);
+	}
 
-			return base.SendInMessage(message);
-		}
-
-		/// <inheritdoc />
-		protected override bool OnSendInMessage(Message message)
-		{
+	/// <inheritdoc />
+	protected override void OnInnerAdapterNewOutMessage(Message message)
+	{
+		if (message.Type != MessageTypes.Reset)
 			ProcessRisk(message);
-			
-			return base.OnSendInMessage(message);
-		}
 
-		/// <inheritdoc />
-		protected override void OnInnerAdapterNewOutMessage(Message message)
+		base.OnInnerAdapterNewOutMessage(message);
+	}
+
+	private void ProcessRisk(Message message)
+	{
+		foreach (var rule in _riskManager.ProcessRules(message))
 		{
-			if (message.Type != MessageTypes.Reset)
-				ProcessRisk(message);
+			LogWarning(LocalizedStrings.ActivatingRiskRule,
+				rule.GetType().GetDisplayName(), rule.Title, rule.Action);
 
-			base.OnInnerAdapterNewOutMessage(message);
-		}
-
-		private void ProcessRisk(Message message)
-		{
-			foreach (var rule in RiskManager.ProcessRules(message))
+			switch (rule.Action)
 			{
-				this.AddWarningLog(LocalizedStrings.Str855Params,
-					rule.GetType().GetDisplayName(), rule.Title, rule.Action);
-
-				switch (rule.Action)
+				case RiskActions.ClosePositions:
 				{
-					case RiskActions.ClosePositions:
-					{
-						break;
-					}
-					//case RiskActions.StopTrading:
-					//	base.OnSendInMessage(new DisconnectMessage());
-					//	break;
-					case RiskActions.CancelOrders:
-						RaiseNewOutMessage(new OrderGroupCancelMessage { TransactionId = TransactionIdGenerator.GetNextId() }.LoopBack(this));
-						break;
-					default:
-						throw new ArgumentOutOfRangeException();
+					break;
 				}
+				//case RiskActions.StopTrading:
+				//	base.OnSendInMessage(new DisconnectMessage());
+				//	break;
+				case RiskActions.CancelOrders:
+					RaiseNewOutMessage(new OrderGroupCancelMessage { TransactionId = TransactionIdGenerator.GetNextId() }.LoopBack(this));
+					break;
+				default:
+					throw new InvalidOperationException(rule.Action.To<string>());
 			}
 		}
+	}
 
-		/// <summary>
-		/// Create a copy of <see cref="RiskMessageAdapter"/>.
-		/// </summary>
-		/// <returns>Copy.</returns>
-		public override IMessageChannel Clone()
-		{
-			return new RiskMessageAdapter(InnerAdapter.TypedClone())
-			{
-				RiskManager = RiskManager.Clone(),
-			};
-		}
+	/// <summary>
+	/// Create a copy of <see cref="RiskMessageAdapter"/>.
+	/// </summary>
+	/// <returns>Copy.</returns>
+	public override IMessageChannel Clone()
+	{
+		return new RiskMessageAdapter(InnerAdapter.TypedClone(), _riskManager.Clone());
 	}
 }

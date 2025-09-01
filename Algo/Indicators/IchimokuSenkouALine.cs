@@ -1,74 +1,60 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: IchimokuSenkouALine.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Senkou (A) line.
+/// </summary>
+public class IchimokuSenkouALine : LengthIndicator<decimal>
 {
-	using System;
-	using System.ComponentModel;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="IchimokuSenkouALine"/>.
+	/// </summary>
+	/// <param name="tenkan">Tenkan line.</param>
+	/// <param name="kijun">Kijun line.</param>
+	public IchimokuSenkouALine(IchimokuLine tenkan, IchimokuLine kijun)
+	{
+		Tenkan = tenkan ?? throw new ArgumentNullException(nameof(tenkan));
+		Kijun = kijun ?? throw new ArgumentNullException(nameof(kijun));
+
+		Reset();
+	}
 
 	/// <summary>
-	/// Senkou (A) line.
+	/// Tenkan line.
 	/// </summary>
-	public class IchimokuSenkouALine : LengthIndicator<decimal>
+	[Browsable(false)]
+	public IchimokuLine Tenkan { get; }
+
+	/// <summary>
+	/// Kijun line.
+	/// </summary>
+	[Browsable(false)]
+	public IchimokuLine Kijun { get; }
+
+	/// <inheritdoc />
+	public override int Length
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="IchimokuSenkouALine"/>.
-		/// </summary>
-		/// <param name="tenkan">Tenkan line.</param>
-		/// <param name="kijun">Kijun line.</param>
-		public IchimokuSenkouALine(IchimokuLine tenkan, IchimokuLine kijun)
+		get => Kijun?.Length ?? 1;
+		set => Kijun.Length = value;
+	}
+
+	/// <inheritdoc />
+	public override int NumValuesToInitialize
+		=> Tenkan.NumValuesToInitialize.Max(Kijun.NumValuesToInitialize) + base.NumValuesToInitialize - 1;
+
+	/// <inheritdoc />
+	protected override decimal? OnProcessDecimal(IIndicatorValue input)
+	{
+		decimal? result = null;
+
+		if (Tenkan.IsFormed && Kijun.IsFormed)
 		{
-			Tenkan = tenkan ?? throw new ArgumentNullException(nameof(tenkan));
-			Kijun = kijun ?? throw new ArgumentNullException(nameof(kijun));
+			if (IsFormed || (input.IsFinal && Buffer.Count == (Length - 1)))
+				result = Buffer[0];
+
+			if (input.IsFinal)
+				Buffer.PushBack((Tenkan.GetCurrentValue() + Kijun.GetCurrentValue()) / 2);
 		}
 
-		/// <inheritdoc />
-		public override bool IsFormed => Buffer.Count >= Kijun.Length;
-
-		/// <summary>
-		/// Tenkan line.
-		/// </summary>
-		[Browsable(false)]
-		public IchimokuLine Tenkan { get; }
-
-		/// <summary>
-		/// Kijun line.
-		/// </summary>
-		[Browsable(false)]
-		public IchimokuLine Kijun { get; }
-
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			decimal? result = null;
-
-			if (Tenkan.IsFormed && Kijun.IsFormed)
-			{
-				if (input.IsFinal)
-					Buffer.Add((Tenkan.GetCurrentValue() + Kijun.GetCurrentValue()) / 2);
-
-				if (IsFormed)
-					result = Buffer[0];
-
-				if (Buffer.Count > Kijun.Length && input.IsFinal)
-				{
-					Buffer.RemoveAt(0);
-				}
-			}
-
-			return result == null ? new DecimalIndicatorValue(this) : new DecimalIndicatorValue(this, result.Value);
-		}
+		return result;
 	}
 }

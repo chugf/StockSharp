@@ -1,90 +1,109 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: GatorOscillator.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Gator oscillator.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/gator_oscillator.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.GatorKey,
+	Description = LocalizedStrings.GatorOscillatorKey)]
+[Doc("topics/api/indicators/list_of_indicators/gator_oscillator.html")]
+[IndicatorOut(typeof(GatorOscillatorValue))]
+public class GatorOscillator : BaseComplexIndicator<GatorOscillatorValue>
 {
-	using System;
-	using System.ComponentModel;
-
-	using StockSharp.Localization;
+	private readonly Alligator _alligator;
 
 	/// <summary>
-	/// Gator oscillator.
+	/// Initializes a new instance of the <see cref="GatorOscillator"/>.
 	/// </summary>
-	/// <remarks>
-	/// http://ta.mql4.com/indicators/bills/gator.
-	/// </remarks>
-	[DisplayName("Gator")]
-	[DescriptionLoc(LocalizedStrings.Str850Key)]
-	public class GatorOscillator : BaseComplexIndicator
+	public GatorOscillator()
 	{
-		private readonly Alligator _alligator;
+		_alligator = new();
+		AddResetTracking(_alligator);
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="GatorOscillator"/>.
-		/// </summary>
-		public GatorOscillator()
-		{
-			_alligator = new Alligator();
-			Histogram1 = new GatorHistogram(_alligator.Jaw, _alligator.Lips, false);
-			Histogram2 = new GatorHistogram(_alligator.Lips, _alligator.Teeth, true);
-			InnerIndicators.Add(Histogram1);
-			InnerIndicators.Add(Histogram2);
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="GatorOscillator"/>.
-		/// </summary>
-		/// <param name="alligator">Alligator.</param>
-		/// <param name="histogram1">Top histogram.</param>
-		/// <param name="histogram2">Lower histogram.</param>
-		public GatorOscillator(Alligator alligator, GatorHistogram histogram1, GatorHistogram histogram2)
-			: base(histogram1, histogram2)
-		{
-			_alligator = alligator ?? throw new ArgumentNullException(nameof(alligator));
-			Histogram1 = histogram1;
-			Histogram2 = histogram2;
-		}
-
-		/// <summary>
-		/// Top histogram.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName(LocalizedStrings.Str3564Key)]
-		[DescriptionLoc(LocalizedStrings.Str851Key)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public GatorHistogram Histogram1 { get; }
-
-		/// <summary>
-		/// Lower histogram.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName(LocalizedStrings.Str3565Key)]
-		[DescriptionLoc(LocalizedStrings.Str852Key)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public GatorHistogram Histogram2 { get; }
-
-		/// <inheritdoc />
-		public override bool IsFormed => _alligator.IsFormed;
-
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			_alligator.Process(input);
-
-			return base.OnProcess(input);
-		}
+		AddInner(Histogram1 = new(_alligator.Jaw, _alligator.Lips, false));
+		AddInner(Histogram2 = new(_alligator.Lips, _alligator.Teeth, true));
 	}
+
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.MinusOnePlusOne;
+
+	/// <summary>
+	/// Top histogram.
+	/// </summary>
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.UpKey,
+		Description = LocalizedStrings.TopHistogramKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public GatorHistogram Histogram1 { get; }
+
+	/// <summary>
+	/// Lower histogram.
+	/// </summary>
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.DownKey,
+		Description = LocalizedStrings.LowHistogramKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public GatorHistogram Histogram2 { get; }
+
+	/// <inheritdoc />
+	protected override bool CalcIsFormed() => _alligator.IsFormed;
+
+	/// <inheritdoc />
+	protected override IIndicatorValue OnProcess(IIndicatorValue input)
+	{
+		_alligator.Process(input);
+
+		return base.OnProcess(input);
+	}
+
+	/// <inheritdoc />
+	public override string ToString() => $"{base.ToString()}, H1={Histogram1}, H2={Histogram2}";
+
+	/// <inheritdoc />
+	protected override GatorOscillatorValue CreateValue(DateTimeOffset time)
+		=> new(this, time);
+}
+
+/// <summary>
+/// <see cref="GatorOscillator"/> indicator value.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="GatorOscillatorValue"/>.
+/// </remarks>
+/// <param name="indicator"><see cref="GatorOscillator"/></param>
+/// <param name="time"><see cref="IIndicatorValue.Time"/></param>
+public class GatorOscillatorValue(GatorOscillator indicator, DateTimeOffset time) : ComplexIndicatorValue<GatorOscillator>(indicator, time)
+{
+	/// <summary>
+	/// Gets the <see cref="GatorOscillator.Histogram1"/> value.
+	/// </summary>
+	public IIndicatorValue Histogram1Value => this[TypedIndicator.Histogram1];
+
+	/// <summary>
+	/// Gets the <see cref="GatorOscillator.Histogram1"/> value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? Histogram1 => Histogram1Value.ToNullableDecimal();
+
+	/// <summary>
+	/// Gets the <see cref="GatorOscillator.Histogram2"/> value.
+	/// </summary>
+	public IIndicatorValue Histogram2Value => this[TypedIndicator.Histogram2];
+
+	/// <summary>
+	/// Gets the <see cref="GatorOscillator.Histogram2"/> value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? Histogram2 => Histogram2Value.ToNullableDecimal();
+
+	/// <inheritdoc />
+	public override string ToString() => $"Histogram1={Histogram1}, Histogram2={Histogram2}";
 }

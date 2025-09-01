@@ -1,101 +1,153 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Messages;
 
-Project: StockSharp.Messages.Messages
-File: PortfolioLookupMessage.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-
-namespace StockSharp.Messages
+/// <summary>
+/// Message portfolio lookup for specified criteria.
+/// </summary>
+[DataContract]
+[Serializable]
+public class PortfolioLookupMessage : PortfolioMessage, INullableSecurityIdMessage, IStrategyIdMessage, ISubscriptionMessage
 {
-	using System;
-	using System.Runtime.Serialization;
-	using System.ComponentModel;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="PortfolioLookupMessage"/>.
+	/// </summary>
+	public PortfolioLookupMessage()
+		: base(MessageTypes.PortfolioLookup)
+	{
+	}
 
-	using Ecng.Common;
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.TransactionKey,
+		Description = LocalizedStrings.TransactionIdKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public long TransactionId { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	public bool IsSubscribe { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.FromKey,
+		Description = LocalizedStrings.StartDateDescKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public DateTimeOffset? From { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.UntilKey,
+		Description = LocalizedStrings.ToDateDescKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public DateTimeOffset? To { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	public long? Skip { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	public long? Count { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	public FillGapsDays? FillGaps { get; set; }
+
+	/// <inheritdoc />
+	[DataMember]
+	public string StrategyId { get; set; }
 
 	/// <summary>
-	/// Message portfolio lookup for specified criteria.
+	/// Side.
 	/// </summary>
-	[DataContract]
-	[Serializable]
-	public class PortfolioLookupMessage : PortfolioMessage, INullableSecurityIdMessage, IStrategyIdMessage
+	[DataMember]
+	public Sides? Side { get; set; }
+
+	/// <inheritdoc />
+	public override DataType DataType => DataType.PositionChanges;
+
+	/// <inheritdoc />
+	[TypeConverter(typeof(StringToSecurityIdTypeConverter))]
+	public SecurityId? SecurityId { get; set; }
+
+	bool ISubscriptionMessage.FilterEnabled
+		=>
+		!PortfolioName.IsEmpty() || Currency != null ||
+		!BoardCode.IsEmpty() || !ClientCode.IsEmpty();
+
+	bool ISubscriptionMessage.SpecificItemRequest => false;
+
+	/// <summary>
+	/// Create a copy of <see cref="PortfolioLookupMessage"/>.
+	/// </summary>
+	/// <returns>Copy.</returns>
+	public override Message Clone()
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="PortfolioLookupMessage"/>.
-		/// </summary>
-		public PortfolioLookupMessage()
-			: base(MessageTypes.PortfolioLookup)
-		{
-		}
+		var clone = new PortfolioLookupMessage();
+		CopyTo(clone);
+		return clone;
+	}
 
-		/// <inheritdoc />
-		[DataMember]
-		public string StrategyId { get; set; }
+	/// <summary>
+	/// Copy the message into the <paramref name="destination" />.
+	/// </summary>
+	/// <param name="destination">The object, to which copied information.</param>
+	protected virtual void CopyTo(PortfolioLookupMessage destination)
+	{
+		base.CopyTo(destination);
 
-		/// <summary>
-		/// Side.
-		/// </summary>
-		[DataMember]
-		public Sides? Side { get; set; }
+		destination.TransactionId = TransactionId;
+		destination.SecurityId = SecurityId;
+		destination.StrategyId = StrategyId;
+		destination.Side = Side;
+		destination.IsSubscribe = IsSubscribe;
+		destination.From = From;
+		destination.To = To;
+		destination.Skip = Skip;
+		destination.Count = Count;
+		destination.FillGaps = FillGaps;
+	}
 
-		/// <inheritdoc />
-		public override DataType DataType => DataType.PositionChanges;
+	/// <inheritdoc />
+	public override string ToString()
+	{
+		var str = base.ToString();
 
-		/// <inheritdoc />
-		[TypeConverter(typeof(StringToSecurityIdTypeConverter))]
-		public SecurityId? SecurityId { get; set; }
+		if (TransactionId > 0)
+			str += $",TransId={TransactionId}";
 
-		/// <summary>
-		/// Create a copy of <see cref="PortfolioLookupMessage"/>.
-		/// </summary>
-		/// <returns>Copy.</returns>
-		public override Message Clone()
-		{
-			var clone = new PortfolioLookupMessage();
-			CopyTo(clone);
-			return clone;
-		}
+		if (!IsSubscribe)
+			str += $",IsSubscribe={IsSubscribe}";
 
-		/// <summary>
-		/// Copy the message into the <paramref name="destination" />.
-		/// </summary>
-		/// <param name="destination">The object, to which copied information.</param>
-		protected virtual void CopyTo(PortfolioLookupMessage destination)
-		{
-			base.CopyTo(destination);
+		if (SecurityId != null)
+			str += $",Sec={SecurityId}";
 
-			destination.SecurityId = SecurityId;
-			destination.StrategyId = StrategyId;
-			destination.Side = Side;
-		}
+		if (!StrategyId.IsEmpty())
+			str += $",Strategy={StrategyId}";
 
-		/// <inheritdoc />
-		public override string ToString()
-		{
-			var str = base.ToString();
+		if (Side != null)
+			str += $",Side={Side.Value}";
 
-			if (!IsSubscribe)
-				str += $",IsSubscribe={IsSubscribe}";
+		if (From != default)
+			str += $",From={From}";
 
-			if (SecurityId != null)
-				str += $",Sec={SecurityId}";
+		if (To != default)
+			str += $",To={To}";
 
-			if (!StrategyId.IsEmpty())
-				str += $",Strategy={StrategyId}";
+		if (Skip != default)
+			str += $",Skip={Skip}";
 
-			if (Side != null)
-				str += $",Side={Side.Value}";
+		if (Count != default)
+			str += $",Count={Count}";
 
-			return str;
-		}
+		if (FillGaps != default)
+			str += $",Gaps={FillGaps}";
+
+		return str;
 	}
 }

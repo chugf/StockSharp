@@ -1,67 +1,56 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: DetrendedPriceOscillator.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Price oscillator without trend.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/dpo.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.DPOKey,
+	Description = LocalizedStrings.DetrendedPriceOscillatorKey)]
+[Doc("topics/api/indicators/list_of_indicators/dpo.html")]
+public class DetrendedPriceOscillator : LengthIndicator<decimal>
 {
-	using System.ComponentModel;
-
-	using StockSharp.Localization;
+	private readonly SimpleMovingAverage _sma;
+	private int _lookBack;
 
 	/// <summary>
-	/// Price oscillator without trend.
+	/// Initializes a new instance of the <see cref="DetrendedPriceOscillator"/>.
 	/// </summary>
-	[DisplayName("DPO")]
-	[DescriptionLoc(LocalizedStrings.Str761Key)]
-	public class DetrendedPriceOscillator : LengthIndicator<decimal>
+	public DetrendedPriceOscillator()
 	{
-		private readonly SimpleMovingAverage _sma;
+		_sma = new();
+		Length = 3;
+	}
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="DetrendedPriceOscillator"/>.
-		/// </summary>
-		public DetrendedPriceOscillator()
-		{
-			_sma = new SimpleMovingAverage();
-			Length = 3;
-		}
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.MinusOnePlusOne;
+	
+	/// <inheritdoc />
+	public override int NumValuesToInitialize => _sma.NumValuesToInitialize + base.NumValuesToInitialize - 1;
 
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			_sma.Length = (Length - 2) * 2;
-			base.Reset();
-		}
+	/// <inheritdoc />
+	public override void Reset()
+	{
+		_sma.Length = Length;
+		_lookBack = Length / 2 + 1;
 
-		/// <inheritdoc />
-		public override bool IsFormed => Buffer.Count >= Length;
+		base.Reset();
+	}
 
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			var smaValue = _sma.Process(input);
+	/// <inheritdoc />
+	protected override decimal? OnProcessDecimal(IIndicatorValue input)
+	{
+		var smaValue = _sma.Process(input);
 
-			if (_sma.IsFormed && input.IsFinal)
-				Buffer.Add(smaValue.GetValue<decimal>());
+		if (_sma.IsFormed && input.IsFinal)
+			Buffer.PushBack(smaValue.ToDecimal());
 
-			if (!IsFormed)
-				return new DecimalIndicatorValue(this);
+		if (!IsFormed)
+			return null;
 
-			if (Buffer.Count > Length)
-				Buffer.RemoveAt(0);
-
-			return new DecimalIndicatorValue(this, input.GetValue<decimal>() - Buffer[0]);
-		}
+		return input.ToDecimal() - Buffer[0.Max(Buffer.Count - 1 - _lookBack)];
 	}
 }

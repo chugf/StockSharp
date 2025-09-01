@@ -1,60 +1,68 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: ShiftedIndicatorValue.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// The shifted value of the indicator.
+/// </summary>
+public class ShiftedIndicatorValue : SingleIndicatorValue<decimal>
 {
-	using System;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="ShiftedIndicatorValue"/>.
+	/// </summary>
+	/// <param name="indicator">Indicator.</param>
+	/// <param name="time"><see cref="IIndicatorValue.Time"/></param>
+	public ShiftedIndicatorValue(IIndicator indicator, DateTimeOffset time)
+		: base(indicator, time)
+	{
+	}
 
 	/// <summary>
-	/// The shifted value of the indicator.
+	/// Initializes a new instance of the <see cref="ShiftedIndicatorValue"/>.
 	/// </summary>
-	public class ShiftedIndicatorValue : SingleIndicatorValue<IIndicatorValue>
+	/// <param name="indicator">Indicator.</param>
+	/// <param name="value">Indicator value.</param>
+	/// <param name="shift">The shift of the indicator value.</param>
+	/// <param name="time"><see cref="IIndicatorValue.Time"/></param>
+	public ShiftedIndicatorValue(IIndicator indicator, decimal value, int shift, DateTimeOffset time)
+		: base(indicator, value, time)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="ShiftedIndicatorValue"/>.
-		/// </summary>
-		/// <param name="indicator">Indicator.</param>
-		public ShiftedIndicatorValue(IIndicator indicator)
-			: base(indicator)
+		Shift = shift;
+	}
+
+	private int _shift;
+
+	/// <summary>
+	/// The shift of the indicator value.
+	/// </summary>
+	public int Shift
+	{
+		get => _shift;
+		private set
 		{
+			if (value < 0)
+				throw new ArgumentOutOfRangeException(nameof(value), value, LocalizedStrings.InvalidValue);
+
+			_shift = value;
 		}
+	}
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="ShiftedIndicatorValue"/>.
-		/// </summary>
-		/// <param name="shift">The shift of the indicator value.</param>
-		/// <param name="value">Indicator value.</param>
-		/// <param name="indicator">Indicator.</param>
-		public ShiftedIndicatorValue(IIndicator indicator, int shift, IIndicatorValue value)
-			: base(indicator, value)
-		{
-			Shift = shift;
-		}
+	/// <inheritdoc />
+	public override IEnumerable<object> ToValues()
+	{
+		foreach (var v in base.ToValues())
+			yield return v;
 
-		/// <summary>
-		/// The shift of the indicator value.
-		/// </summary>
-		public int Shift { get; }
+		if (!IsEmpty)
+			yield return Shift;
+	}
 
-		/// <inheritdoc />
-		public override bool IsSupport(Type valueType) => !IsEmpty && Value.IsSupport(valueType);
+	/// <inheritdoc />
+	public override void FromValues(object[] values)
+	{
+		base.FromValues(values);
 
-		/// <inheritdoc />
-		public override T GetValue<T>() => base.GetValue<IIndicatorValue>().GetValue<T>();
+		if (IsEmpty)
+			return;
 
-		/// <inheritdoc />
-		public override IIndicatorValue SetValue<T>(IIndicator indicator, T value) => throw new NotSupportedException();
+		Shift = values[1].To<int>();
 	}
 }

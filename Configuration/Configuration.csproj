@@ -1,14 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\common.props" />
+  <Import Project="..\common_target_standard.props" />
   <PropertyGroup>
     <ProjectGuid>{2CFF1903-4EF5-46F8-AB5D-BB623CA75CE6}</ProjectGuid>
-    <RootNamespace>StockSharp.Configuration</RootNamespace>
-    <AssemblyName>StockSharp.Configuration</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Messages\Messages.csproj" />
   </ItemGroup>
-  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
-    <Reference Include="System.Configuration" />
+  <ItemGroup>
+    <PackageReference Include="NuGet.Configuration" Version="$(NuGetApiVer)" />
+    <PackageReference Include="Ecng.Configuration" Version="$(EcngVer)" />
   </ItemGroup>
 </Project>

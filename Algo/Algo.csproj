@@ -1,23 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\common.props" />
+  <Import Project="..\common_target_net.props" />
   <PropertyGroup>
-    <RootNamespace>StockSharp.Algo</RootNamespace>
-    <AssemblyName>StockSharp.Algo</AssemblyName>
     <ProjectGuid>{2A5C6FAD-106C-4A4A-B602-77A6B1034CA2}</ProjectGuid>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Ecng.Interop" Version="$(EcngVer)" />
     <PackageReference Include="Ecng.Net" Version="$(EcngVer)" />
     <PackageReference Include="Ecng.IO" Version="$(EcngVer)" />
-  
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-  </ItemGroup>
-  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
-    <Reference Include="System.Core" />
-    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <PackageReference Include="Ecng.StringSearch" Version="$(EcngVer)" />
+    <PackageReference Include="Ecng.Compilation" Version="$(EcngVer)" />
+    <PackageReference Include="Ecng.MathLight" Version="$(EcngVer)" />
+	  
+    <PackageReference Include="GeneticSharp" Version="$(GeneticSharpVer)" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\BusinessEntities\BusinessEntities.csproj" />
-    <ProjectReference Include="..\Community\Community.csproj" />
+    <ProjectReference Include="..\Charting.Interfaces\Charting.Interfaces.csproj" />
+    <ProjectReference Include="..\Configuration\Configuration.csproj" />
   </ItemGroup>
 </Project>

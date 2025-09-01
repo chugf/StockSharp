@@ -1,160 +1,193 @@
-﻿namespace StockSharp.Algo.Strategies
+﻿namespace StockSharp.Algo.Strategies;
+
+partial class Strategy
 {
-	using System;
-	using System.ComponentModel;
-	using System.Collections.Generic;
-	using System.Linq;
-
-	using Ecng.Collections;
-	using Ecng.Common;
-	using Ecng.ComponentModel;
-
-	using StockSharp.BusinessEntities;
-	using StockSharp.Messages;
-	using StockSharp.Localization;
-	using StockSharp.Logging;
-
-	partial class Strategy
+	private class StrategyPositionManager(Strategy strategy)
 	{
-		private void ProcessPositionChangeMessage(PositionChangeMessage message)
+		private readonly SyncObject _lock = new();
+
+		private readonly Dictionary<(Security, Portfolio), Position> _positions = [];
+
+		public Position TryGetPosition(Security security, Portfolio portfolio)
 		{
-			if (Connector.KeepStrategiesPositions)
-				return;
+			lock (_lock)
+				return _positions.TryGetValue((security, portfolio));
+		}
 
-			if (message.StrategyId != EnsureGetId())
-				return;
+		public void SetPosition(Security security, Portfolio portfolio, decimal value)
+		{
+			lock (_lock)
+				GetPosition(security, portfolio, out _).CurrentValue = value;
+		}
 
-			var connector = SafeGetConnector();
-
-			var security = connector.LookupById(message.SecurityId);
-			var portfolio = connector.LookupByPortfolioName(message.PortfolioName);
-
-			var position = _positions.SafeAdd(CreateKey(security, portfolio), k => new Position
+		private Position GetPosition(Security security, Portfolio portfolio, out bool isNew)
+			=> _positions.SafeAdd((security, portfolio), _ => new()
 			{
 				Security = security,
 				Portfolio = portfolio,
-				StrategyId = message.StrategyId,
-			}, out var isNew);
+				StrategyId = strategy.EnsureGetId(),
+			}, out isNew);
 
-			position.ApplyChanges(message);
-
-			if (isNew)
-				_newPosition?.Invoke(position);
-			else
-				_positionChanged?.Invoke(position);
-
-			RaisePositionChanged();
-
-			foreach (var id in message.GetSubscriptionIds())
+		public Position[] Positions
+		{
+			get
 			{
-				if (_subscriptionsById.TryGetValue(id, out var subscription))
-					PositionReceived?.Invoke(subscription, position);
+				lock (_lock)
+					return [.. _positions.Values];
 			}
 		}
 
-		private void OnConnectorPositionReceived(Subscription subscription, Position position)
+		public void Reset()
 		{
-			if (_pfSubscription != subscription)
+			lock (_lock)
+			{
+				_positions.Clear();
+			}
+		}
+
+		public void ProcessOrder(Order order)
+		{
+			ArgumentNullException.ThrowIfNull(order);
+
+			var matched = order.GetMatchedVolume().Value;
+
+			if (matched == 0)
 				return;
 
-			if (position.StrategyId != EnsureGetId())
+			if (order.Side == Sides.Sell)
+				matched = -matched;
+
+			Position position;
+			bool isNew;
+
+			lock (_lock)
 			{
-				this.AddWarningLog("Position {0} has StrategyId '{1}' instead of '{2}'.", position, position.StrategyId, EnsureGetId());
-				return;
+				position = GetPosition(order.Security, order.Portfolio, out isNew);
+				position.CurrentValue = (position.CurrentValue ?? 0) + matched;
+				position.LocalTime = order.LocalTime;
+				position.LastChangeTime = order.ServerTime;
 			}
 
-			_positions.SafeAdd(CreateKey(position.Security, position.Portfolio), k => position, out var isNew);
+			strategy.ProcessPosition(position, isNew);
+		}
+	}
 
-			if (isNew)
-				_newPosition?.Invoke(position);
-			else
-				_positionChanged?.Invoke(position);
+	private readonly StrategyPositionManager _posManager;
 
-			RaisePositionChanged();
+	private void ProcessPosition(Position position, bool isNew)
+	{
+		ArgumentNullException.ThrowIfNull(position);
 
+		ProcessRisk(() => position.ToChangeMessage());
+
+		LogInfo(LocalizedStrings.NewPosition, $"{position.Security}/{position.Portfolio}={position.CurrentValue}");
+
+		if (isNew)
+			_newPosition?.Invoke(position);
+		else
+			_positionChanged?.Invoke(position);
+
+		RaisePositionChanged(position.LocalTime);
+
+		foreach (var subscription in _subscriptionsById.SyncGet(p => p.Values.Where(s => s.SubscriptionMessage is PortfolioLookupMessage).ToArray()))
+		{
 			PositionReceived?.Invoke(subscription, position);
+
+			if (subscription == PortfolioLookup)
+				OnPositionReceived(position);
 		}
+	}
 
-		private void RaisePositionChanged()
-		{
-			this.AddInfoLog(LocalizedStrings.Str1399Params, _positions.CachedPairs.Select(pos => pos.Key + "=" + pos.Value).JoinCommaSpace());
+	/// <summary>
+	/// Position received.
+	/// </summary>
+	/// <param name="position"><see cref="Position"/></param>
+	protected virtual void OnPositionReceived(Position position)
+	{
+	}
 
-			this.Notify(nameof(Position));
-			PositionChanged?.Invoke();
+	private void RaisePositionChanged(DateTimeOffset time)
+	{
+		this.Notify(nameof(Position));
+		PositionChanged?.Invoke();
 
-			StatisticManager.AddPosition(CurrentTime, Position);
-			StatisticManager.AddPnL(CurrentTime, PnL);
+		StatisticManager.AddPosition(time, Position);
+		StatisticManager.AddPnL(time, PnL, Commission);
+	}
 
-			RaiseNewStateMessage(nameof(Position), Position);
-		}
+	/// <summary>
+	/// Get position.
+	/// </summary>
+	/// <param name="security">Security.</param>
+	/// <param name="portfolio">Portfolio.</param>
+	/// <returns>Position.</returns>
+	public decimal? GetPositionValue(Security security, Portfolio portfolio)
+		=> _posManager.TryGetPosition(security, portfolio)?.CurrentValue;
 
-		private readonly CachedSynchronizedDictionary<Tuple<Security, Portfolio>, Position> _positions = new CachedSynchronizedDictionary<Tuple<Security, Portfolio>, Position>();
+	/// <summary>
+	/// Set position.
+	/// </summary>
+	/// <param name="security">Security.</param>
+	/// <param name="portfolio">Portfolio.</param>
+	/// <param name="value">Position.</param>
+	public void SetPositionValue(Security security, Portfolio portfolio, decimal value)
+		=> _posManager.SetPosition(security, portfolio, value);
 
-		private Tuple<Security, Portfolio> CreateKey(Security security, Portfolio portfolio)
-			=> Tuple.Create(security ?? throw new ArgumentNullException(nameof(security)), portfolio ?? throw new ArgumentNullException(nameof(portfolio)));
+	/// <summary>
+	/// The position aggregate value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal Position
+	{
+		get => Security == null || Portfolio == null ? 0m : GetPositionValue(Security, Portfolio) ?? 0;
+		[Obsolete("Use SetPositionValue method.")]
+		set { }
+	}
 
-		/// <summary>
-		/// Get position.
-		/// </summary>
-		/// <param name="security">Security.</param>
-		/// <param name="portfolio">Portfolio.</param>
-		/// <returns>Position.</returns>
-		protected decimal? GetPositionValue(Security security, Portfolio portfolio)
-			=> _positions.TryGetValue(CreateKey(security, portfolio))?.CurrentValue;
+	/// <summary>
+	/// <see cref="Position"/> change event.
+	/// </summary>
+	[Obsolete("Use IPositionProvider.PositionChanged instead.")]
+	public event Action PositionChanged;
 
-		/// <inheritdoc />
-		[Browsable(false)]
-		public IEnumerable<Position> Positions => _positions.CachedValues;
+	/// <inheritdoc />
+	[Browsable(false)]
+	public IEnumerable<Position> Positions => _posManager.Positions;
 
-		private Action<Position> _newPosition;
+	private Action<Position> _newPosition;
 
-		event Action<Position> IPositionProvider.NewPosition
-		{
-			add => _newPosition += value;
-			remove => _newPosition -= value;
-		}
+	event Action<Position> IPositionProvider.NewPosition
+	{
+		add => _newPosition += value;
+		remove => _newPosition -= value;
+	}
 
-		private Action<Position> _positionChanged;
+	private Action<Position> _positionChanged;
 
-		event Action<Position> IPositionProvider.PositionChanged
-		{
-			add => _positionChanged += value;
-			remove => _positionChanged -= value;
-		}
+	event Action<Position> IPositionProvider.PositionChanged
+	{
+		add => _positionChanged += value;
+		remove => _positionChanged -= value;
+	}
 
-		Position IPositionProvider.GetPosition(Portfolio portfolio, Security security, string strategyId, Sides? side, string clientCode, string depoName, TPlusLimits? limitType)
-			=> _positions.TryGetValue(Tuple.Create(security, portfolio));
+	Position IPositionProvider.GetPosition(Portfolio portfolio, Security security, string strategyId, Sides? side, string clientCode, string depoName, TPlusLimits? limitType)
+		=> _posManager.TryGetPosition(security, portfolio);
 
-		Portfolio IPortfolioProvider.LookupByPortfolioName(string name)
-			=> SafeGetConnector().LookupByPortfolioName(name);
+	Portfolio IPortfolioProvider.LookupByPortfolioName(string name)
+		=> SafeGetConnector().LookupByPortfolioName(name);
 
-		IEnumerable<Portfolio> IPortfolioProvider.Portfolios
-			=> Portfolio == null ? Enumerable.Empty<Portfolio>() : new[] { Portfolio };
+	IEnumerable<Portfolio> IPortfolioProvider.Portfolios
+		=> Portfolio == null ? [] : [Portfolio];
 
-		//private Action<Portfolio> _newPortfolio;
+	event Action<Portfolio> IPortfolioProvider.NewPortfolio
+	{
+		add { }
+		remove { }
+	}
 
-		event Action<Portfolio> IPortfolioProvider.NewPortfolio
-		{
-			add { }
-			remove { }
-		}
-
-		//private Action<Portfolio> _portfolioChanged;
-
-		event Action<Portfolio> IPortfolioProvider.PortfolioChanged
-		{
-			add { }
-			remove { }
-		}
-
-		//private void OnConnectorPortfolioChanged(Portfolio portfolio)
-		//{
-		//	_portfolioChanged?.Invoke(portfolio);
-		//}
-
-		//private void OnConnectorNewPortfolio(Portfolio portfolio)
-		//{
-		//	_newPortfolio?.Invoke(portfolio);
-		//}
+	event Action<Portfolio> IPortfolioProvider.PortfolioChanged
+	{
+		add { }
+		remove { }
 	}
 }

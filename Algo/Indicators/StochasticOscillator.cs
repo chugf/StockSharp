@@ -1,58 +1,95 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: StochasticOscillator.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// The stochastic oscillator.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/stochastic_oscillator.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.STOCHKey,
+	Description = LocalizedStrings.StochasticOscillatorKey)]
+[Doc("topics/api/indicators/list_of_indicators/stochastic_oscillator.html")]
+[IndicatorOut(typeof(StochasticOscillatorValue))]
+public class StochasticOscillator : BaseComplexIndicator<StochasticOscillatorValue>
 {
-	using System.ComponentModel;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="StochasticOscillator"/>.
+	/// </summary>
+	public StochasticOscillator()
+	{
+		AddInner(K = new());
+		AddInner(D = new() { Length = 3 });
 
-	using StockSharp.Localization;
+		Mode = ComplexIndicatorModes.Sequence;
+	}
+
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.Percent;
 
 	/// <summary>
-	/// The stochastic oscillator.
+	/// %K.
 	/// </summary>
-	[DisplayName("Stochastic Oscillator")]
-	[Description("Stochastic Oscillator")]
-	public class StochasticOscillator : BaseComplexIndicator
-	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StochasticOscillator"/>.
-		/// </summary>
-		public StochasticOscillator()
-		{
-			InnerIndicators.Add(K = new StochasticK());
-			InnerIndicators.Add(D = new SimpleMovingAverage { Length = 3 });
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.KKey,
+		Description = LocalizedStrings.KKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public StochasticK K { get; }
 
-			Mode = ComplexIndicatorModes.Sequence;
-		}
+	/// <summary>
+	/// %D.
+	/// </summary>
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.DKey,
+		Description = LocalizedStrings.DKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public SimpleMovingAverage D { get; }
 
-		/// <summary>
-		/// %K.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("%K")]
-		[Description("%K")]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public StochasticK K { get; }
+	/// <inheritdoc />
+	public override string ToString() => base.ToString() + $" %K={K.Length} %D={D.Length}";
 
-		/// <summary>
-		/// %D.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("%D")]
-		[Description("%D")]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public SimpleMovingAverage D { get; }
-	}
+	/// <inheritdoc />
+	protected override StochasticOscillatorValue CreateValue(DateTimeOffset time)
+		=> new(this, time);
+}
+
+/// <summary>
+/// <see cref="StochasticOscillator"/> indicator value.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="StochasticOscillatorValue"/>.
+/// </remarks>
+/// <param name="indicator"><see cref="StochasticOscillator"/></param>
+/// <param name="time"><see cref="IIndicatorValue.Time"/></param>
+public class StochasticOscillatorValue(StochasticOscillator indicator, DateTimeOffset time) : ComplexIndicatorValue<StochasticOscillator>(indicator, time)
+{
+	/// <summary>
+	/// Gets the %K value.
+	/// </summary>
+	public IIndicatorValue KValue => this[TypedIndicator.K];
+
+	/// <summary>
+	/// Gets the %K value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? K => KValue.ToNullableDecimal();
+
+	/// <summary>
+	/// Gets the %D value.
+	/// </summary>
+	public IIndicatorValue DValue => this[TypedIndicator.D];
+
+	/// <summary>
+	/// Gets the %D value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? D => DValue.ToNullableDecimal();
+
+	/// <inheritdoc />
+	public override string ToString() => $"K={K}, D={D}";
 }

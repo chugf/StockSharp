@@ -1,137 +1,143 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: DirectionalIndex.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Welles Wilder Directional Movement Index.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/dmi.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.DMIKey,
+	Description = LocalizedStrings.WellesWilderDirectionalMovementIndexKey)]
+[Doc("topics/api/indicators/list_of_indicators/dmi.html")]
+[IndicatorOut(typeof(DirectionalIndexValue))]
+public class DirectionalIndex : BaseComplexIndicator<DirectionalIndexValue>
 {
-	using System;
-	using System.ComponentModel;
-
-	using Ecng.Common;
-	using Ecng.Serialization;
-
-	using StockSharp.Localization;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="DirectionalIndex"/>.
+	/// </summary>
+	public DirectionalIndex()
+	{
+		AddInner(Plus = new());
+		AddInner(Minus = new());
+	}
 
 	/// <summary>
-	/// Welles Wilder Directional Movement Index.
+	/// Period length.
 	/// </summary>
-	[DisplayName("DX")]
-	[DescriptionLoc(LocalizedStrings.Str762Key)]
-	public class DirectionalIndex : BaseComplexIndicator
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.PeriodKey,
+		Description = LocalizedStrings.IndicatorPeriodKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public int Length
 	{
-		private sealed class DxValue : ComplexIndicatorValue
+		get => Plus.Length;
+		set
 		{
-			private decimal _value;
-
-			public DxValue(IIndicator indicator)
-				: base(indicator)
-			{
-			}
-
-			public override IIndicatorValue SetValue<T>(IIndicator indicator, T value)
-			{
-				IsEmpty = false;
-				_value = value.To<decimal>();
-				return new DecimalIndicatorValue(indicator, _value);
-			}
-
-			public override T GetValue<T>()
-			{
-				return _value.To<T>();
-			}
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="DirectionalIndex"/>.
-		/// </summary>
-		public DirectionalIndex()
-		{
-			InnerIndicators.Add(Plus = new DiPlus());
-			InnerIndicators.Add(Minus = new DiMinus());
-		}
-
-		/// <summary>
-		/// Period length.
-		/// </summary>
-		[DisplayNameLoc(LocalizedStrings.Str736Key)]
-		[DescriptionLoc(LocalizedStrings.Str737Key)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public virtual int Length
-		{
-			get => Plus.Length;
-			set
-			{
-				Plus.Length = Minus.Length = value;
-				Reset();
-			}
-		}
-
-		/// <summary>
-		/// DI+.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("DI+")]
-		[Description("DI+.")]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public DiPlus Plus { get; }
-
-		/// <summary>
-		/// DI-.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("DI-")]
-		[Description("DI-.")]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public DiMinus Minus { get; }
-
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			var value = new DxValue(this) { IsFinal = input.IsFinal };
-
-			var plusValue = Plus.Process(input);
-			var minusValue = Minus.Process(input);
-
-			value.InnerValues.Add(Plus, plusValue);
-			value.InnerValues.Add(Minus, minusValue);
-
-			if (plusValue.IsEmpty || minusValue.IsEmpty)
-				return value;
-
-			var plus = plusValue.GetValue<decimal>();
-			var minus = minusValue.GetValue<decimal>();
-
-			var diSum = plus + minus;
-			var diDiff = Math.Abs(plus - minus);
-
-			value.InnerValues.Add(this, value.SetValue(this, diSum != 0m ? (100 * diDiff / diSum) : 0m));
-
-			return value;
-		}
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			base.Load(storage);
-			Length = storage.GetValue<int>(nameof(Length));
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			base.Save(storage);
-			storage.SetValue(nameof(Length), Length);
+			Plus.Length = Minus.Length = value;
+			Reset();
 		}
 	}
+
+	/// <summary>
+	/// DI+.
+	/// </summary>
+	[Browsable(false)]
+	public DiPlus Plus { get; }
+
+	/// <summary>
+	/// DI-.
+	/// </summary>
+	[Browsable(false)]
+	public DiMinus Minus { get; }
+
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.Percent;
+
+	/// <inheritdoc />
+	public override int NumValuesToInitialize => Plus.NumValuesToInitialize;
+
+	/// <inheritdoc />
+	protected override IIndicatorValue OnProcess(IIndicatorValue input)
+	{
+var value = new DirectionalIndexValue(this, input.Time) { IsFinal = input.IsFinal };
+
+		var plusValue = Plus.Process(input);
+		var minusValue = Minus.Process(input);
+
+		value.Add(Plus, plusValue);
+		value.Add(Minus, minusValue);
+
+		if (plusValue.IsEmpty || minusValue.IsEmpty)
+			return value;
+
+		var plus = plusValue.ToDecimal();
+		var minus = minusValue.ToDecimal();
+
+		var diSum = plus + minus;
+		var diDiff = Math.Abs(plus - minus);
+
+		value.Add(this, value.SetValue(this, diSum != 0m ? (100 * diDiff / diSum) : 0m));
+
+		return value;
+	}
+
+	/// <inheritdoc />
+	public override void Load(SettingsStorage storage)
+	{
+		base.Load(storage);
+		Length = storage.GetValue<int>(nameof(Length));
+	}
+
+	/// <inheritdoc />
+	public override void Save(SettingsStorage storage)
+	{
+		base.Save(storage);
+		storage.SetValue(nameof(Length), Length);
+	}
+
+	/// <inheritdoc />
+	public override string ToString() => base.ToString() + " " + Length;
+
+	/// <inheritdoc />
+	protected override DirectionalIndexValue CreateValue(DateTimeOffset time)
+		=> new(this, time);
+}
+
+/// <summary>
+/// <see cref="DirectionalIndex"/> indicator value.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="DirectionalIndexValue"/>.
+/// </remarks>
+/// <param name="indicator"><see cref="DirectionalIndex"/></param>
+/// <param name="time"><see cref="IIndicatorValue.Time"/></param>
+public class DirectionalIndexValue(DirectionalIndex indicator, DateTimeOffset time) : ComplexIndicatorValue<DirectionalIndex>(indicator, time)
+{
+	/// <summary>
+	/// Gets the <see cref="DirectionalIndex.Plus"/> value.
+	/// </summary>
+	public IIndicatorValue PlusValue => this[TypedIndicator.Plus];
+
+	/// <summary>
+	/// Gets the <see cref="DirectionalIndex.Plus"/> value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? Plus => PlusValue.ToNullableDecimal();
+	
+	/// <summary>
+	/// Gets the <see cref="DirectionalIndex.Minus"/> value.
+	/// </summary>
+	public IIndicatorValue MinusValue => this[TypedIndicator.Minus];
+
+	/// <summary>
+	/// Gets the <see cref="DirectionalIndex.Minus"/> value.
+	/// </summary>
+	[Browsable(false)]
+	public decimal? Minus => MinusValue.ToNullableDecimal();
+
+	/// <inheritdoc />
+	public override string ToString() => $"Plus={Plus}, Minus={Minus}";
 }

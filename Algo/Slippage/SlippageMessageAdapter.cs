@@ -1,84 +1,48 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Slippage;
 
-Project: StockSharp.Algo.Slippage.Algo
-File: SlippageMessageAdapter.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Slippage
+/// <summary>
+/// The message adapter, automatically calculating slippage.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="SlippageMessageAdapter"/>.
+/// </remarks>
+/// <param name="innerAdapter">The adapter, to which messages will be directed.</param>
+/// <param name="slippageManager">Slippage manager.</param>
+public class SlippageMessageAdapter(IMessageAdapter innerAdapter, ISlippageManager slippageManager) : MessageAdapterWrapper(innerAdapter)
 {
-	using System;
+	private readonly ISlippageManager _slippageManager = slippageManager ?? throw new ArgumentNullException(nameof(slippageManager));
 
-	using Ecng.Common;
+	/// <inheritdoc />
+	protected override bool OnSendInMessage(Message message)
+	{
+		_slippageManager.ProcessMessage(message);
+		return base.OnSendInMessage(message);
+	}
 
-	using StockSharp.Messages;
+	/// <inheritdoc />
+	protected override void OnInnerAdapterNewOutMessage(Message message)
+	{
+		if (message.Type != MessageTypes.Reset)
+		{
+			var slippage = _slippageManager.ProcessMessage(message);
+
+			if (slippage != null)
+			{
+				var execMsg = (ExecutionMessage)message;
+
+				execMsg.Slippage ??= slippage;
+			}
+		}
+
+		base.OnInnerAdapterNewOutMessage(message);
+	}
 
 	/// <summary>
-	/// The message adapter, automatically calculating slippage.
+	/// Create a copy of <see cref="SlippageMessageAdapter"/>.
 	/// </summary>
-	public class SlippageMessageAdapter : MessageAdapterWrapper
+	/// <returns>Copy.</returns>
+	public override IMessageChannel Clone()
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="SlippageMessageAdapter"/>.
-		/// </summary>
-		/// <param name="innerAdapter">The adapter, to which messages will be directed.</param>
-		public SlippageMessageAdapter(IMessageAdapter innerAdapter)
-			: base(innerAdapter)
-		{
-		}
-
-		private ISlippageManager _slippageManager = new SlippageManager();
-
-		/// <summary>
-		/// Slippage manager.
-		/// </summary>
-		public ISlippageManager SlippageManager
-		{
-			get => _slippageManager;
-			set => _slippageManager = value ?? throw new ArgumentNullException(nameof(value));
-		}
-
-		/// <inheritdoc />
-		protected override bool OnSendInMessage(Message message)
-		{
-			SlippageManager.ProcessMessage(message);
-			return base.OnSendInMessage(message);
-		}
-
-		/// <inheritdoc />
-		protected override void OnInnerAdapterNewOutMessage(Message message)
-		{
-			if (message.Type != MessageTypes.Reset)
-			{
-				var slippage = SlippageManager.ProcessMessage(message);
-
-				if (slippage != null)
-				{
-					var execMsg = (ExecutionMessage)message;
-
-					if (execMsg.Slippage == null)
-						execMsg.Slippage = slippage;
-				}
-			}
-
-			base.OnInnerAdapterNewOutMessage(message);
-		}
-
-		/// <summary>
-		/// Create a copy of <see cref="SlippageMessageAdapter"/>.
-		/// </summary>
-		/// <returns>Copy.</returns>
-		public override IMessageChannel Clone()
-		{
-			return new SlippageMessageAdapter(InnerAdapter.TypedClone());
-		}
+		return new SlippageMessageAdapter(InnerAdapter.TypedClone(), _slippageManager.Clone());
 	}
 }

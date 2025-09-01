@@ -1,97 +1,41 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: OptimalTracking.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Optimal Tracking.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/optimal_tracking.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.OptimalTrackingKey,
+	Description = LocalizedStrings.OptimalTrackingDescKey)]
+[IndicatorIn(typeof(CandleIndicatorValue))]
+[Doc("topics/api/indicators/list_of_indicators/optimal_tracking.html")]
+public sealed class OptimalTracking : LengthIndicator<decimal>
 {
-	using System;
-	using System.ComponentModel;
+	private static readonly decimal _smoothConstant1 = (decimal)Math.Exp(-0.25);
+	private static readonly decimal _smoothConstant = 1 - _smoothConstant1;
 
-	using StockSharp.Algo.Candles;
-
-	/// <summary>
-	/// Optimal Tracking.
-	/// </summary>
-	/// <remarks>
-	/// Based on a Kalman Filter (Dr. R. E. Kalman, 1960) and Kalatas Tracking Index (Paul. R. Kalata, 1984).
-	/// </remarks>
-	[DisplayName("OptimalTracking")]
-	[Description("Optimal Tracking Filter published by John Ehlers")]
-	[IndicatorIn(typeof(CandleIndicatorValue))]
-	public sealed class OptimalTracking : LengthIndicator<decimal>
+	private struct CalcBuffer
 	{
-		//Fields
-
-		//private int mult = 4;
 		private decimal _lambda;
 		private decimal _alpha;
-		private const int _start = 1;
 
 		private decimal _value1Old;
 		private decimal _value2Old;
 		private decimal _resultOld;
 
-		private readonly decimal _smoothConstant1;
-		private readonly decimal _smoothConstant;
-
-		//methods
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="OptimalTracking"/>.
-		/// </summary>
-		public OptimalTracking()
+		public decimal Calculate(OptimalTracking ind, IList<decimal> buff, decimal average, decimal halfRange)
 		{
-			Length = _start + 1; //только 2 т.к текущая и пред свеча.
-			const double x = -0.25;
-			_smoothConstant1 = (decimal)Math.Exp(x);
-			_smoothConstant = 1 - _smoothConstant1;
-		}
-
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			base.Reset();
-
-			_value1Old = 0;
-			_value2Old = 0;
-			_resultOld = 0;
-
-			_lambda = 0;
-			_alpha = 0;
-		}
-
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			var candle = input.GetValue<Candle>();
-			var average = (candle.HighPrice + candle.LowPrice) / 2;
-			var halfRange = (candle.HighPrice - candle.LowPrice) / 2;
-
-			Buffer.Add(average);
-			//var Chec1 = Buffer[Buffer.Count - 1];
-
-			if (IsFormed)
+			if (ind.IsFormed)
 			{
-				if (Buffer.Count > Length)
-					Buffer.RemoveAt(0);
 				//Сглаженное приращение ****************************************************************************
-				var avgDiff = Buffer[Buffer.Count - 1] - Buffer[Buffer.Count - 2];
+				var avgDiff = buff[buff.Count - 1] - buff[buff.Count - 2];
 				var smoothDiff = _smoothConstant * avgDiff + _smoothConstant1 * _value1Old;
 				_value1Old = smoothDiff;
 
 				//Сглаженный Half Range *********************************************************************************
-
 				var smoothRng = _smoothConstant * halfRange + _smoothConstant1 * _value2Old;
 				_value2Old = smoothRng;
 
@@ -108,13 +52,54 @@ namespace StockSharp.Algo.Indicators
 				var result = check2 + check3;
 				_resultOld = result;
 
-				return new DecimalIndicatorValue(this, result);
+				return result;
 			}
 
 			_value2Old = halfRange;
 			_resultOld = average;
 
-			return new DecimalIndicatorValue(this, _resultOld);
+			return _resultOld;
 		}
+	}
+
+	private CalcBuffer _buf;
+
+	/// <summary>
+	/// Initializes a new instance of the <see cref="OptimalTracking"/>.
+	/// </summary>
+	public OptimalTracking()
+	{
+		Length = 2; //только 2 т.к текущая и пред свеча.
+	}
+
+	/// <inheritdoc />
+	public override void Reset()
+	{
+		base.Reset();
+
+		_buf = default;
+	}
+
+	/// <inheritdoc />
+	protected override decimal? OnProcessDecimal(IIndicatorValue input)
+	{
+		var candle = input.ToCandle();
+
+		var average = (candle.HighPrice + candle.LowPrice) / 2;
+		var halfRange = (candle.HighPrice - candle.LowPrice) / 2;
+
+		if (input.IsFinal)
+			Buffer.PushBack(average);
+
+		var buff = input.IsFinal ? Buffer : (IList<decimal>)[.. Buffer.Skip(Buffer.Count >= Length ? 1 : 0), average];
+
+		var b = _buf;
+
+		var result = b.Calculate(this, buff, average, halfRange);
+
+		if (input.IsFinal)
+			_buf = b;
+
+		return result;
 	}
 }

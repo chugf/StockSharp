@@ -1,25 +1,23 @@
-namespace StockSharp.Algo.Expressions
+namespace StockSharp.Algo.Expressions;
+
+/// <summary>
+/// Index securities processor for <see cref="ExpressionIndexSecurity"/>.
+/// </summary>
+/// <remarks>
+/// Initializes a new instance of the <see cref="ExpressionIndexSecurityProcessor"/>.
+/// </remarks>
+/// <param name="basketSecurity">The index, built of combination of several instruments through mathematical formula <see cref="ExpressionIndexSecurity.Expression"/>.</param>
+public class ExpressionIndexSecurityProcessor(Security basketSecurity) : IndexSecurityBaseProcessor<ExpressionIndexSecurity>(basketSecurity)
 {
-	using StockSharp.BusinessEntities;
-
-	/// <summary>
-	/// Index securities processor for <see cref="ExpressionIndexSecurity"/>.
-	/// </summary>
-	public class ExpressionIndexSecurityProcessor : IndexSecurityBaseProcessor<ExpressionIndexSecurity>
+	/// <inheritdoc />
+	protected override decimal OnCalculate(decimal[] values)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="ExpressionIndexSecurityProcessor"/>.
-		/// </summary>
-		/// <param name="basketSecurity">The index, built of combination of several instruments through mathematical formula <see cref="ExpressionIndexSecurity.Expression"/>.</param>
-		public ExpressionIndexSecurityProcessor(Security basketSecurity)
-			: base(basketSecurity)
-		{
-		}
+		if (values is null)
+			throw new ArgumentNullException(nameof(values));
 
-		/// <inheritdoc />
-		protected override decimal OnCalculate(decimal[] values)
-		{
-			return BasketSecurity.Formula.Calculate(values);
-		}
+		if (values.Length != BasketLegs.Length)
+			throw new ArgumentOutOfRangeException(nameof(values));
+
+		return BasketSecurity.Formula.Calculate(values);
 	}
 }

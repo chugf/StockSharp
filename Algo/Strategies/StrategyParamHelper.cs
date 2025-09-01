@@ -1,75 +1,50 @@
-namespace StockSharp.Algo.Strategies
+namespace StockSharp.Algo.Strategies;
+
+using Ecng.Reflection;
+
+/// <summary>
+/// The auxiliary class for <see cref="StrategyParam{T}"/>.
+/// </summary>
+public static class StrategyParamHelper
 {
-	using System;
+	/// <summary>
+	/// Check can optimize parameter.
+	/// </summary>
+	/// <param name="type">The type of the parameter value.</param>
+	/// <returns><see langword="true" />, if can optimize the parameter, otherwise, <see langword="false" />.</returns>
+	public static bool CanOptimize(this Type type)
+	{
+		if (type is null)
+			throw new ArgumentNullException(nameof(type));
 
-	using Ecng.Common;
+		type = type.GetUnderlyingType() ?? type;
 
-	using StockSharp.Messages;
+		return type.IsNumeric() && !type.IsEnum() || type == typeof(bool) || type == typeof(Unit) || type == typeof(TimeSpan) || type == typeof(DataType);
+	}
+
+	private static StrategyParam<T> CreateParam<T>(string id) => new(id);
+
+	private static readonly MethodInfo _createParamMethod = typeof(StrategyParamHelper).GetMethod(nameof(CreateParam), BindingFlags.Static | BindingFlags.NonPublic);
 
 	/// <summary>
-	/// The auxiliary class for <see cref="StrategyParam{T}"/>.
+	/// Create parameter.
 	/// </summary>
-	public static class StrategyParamHelper
+	/// <param name="type"><see cref="IStrategyParam.Type"/></param>
+	/// <param name="id"><see cref="IStrategyParam.Id"/></param>
+	/// <returns><see cref="IStrategyParam"/></returns>
+	public static IStrategyParam CreateParam(Type type, string id)
+		=> (IStrategyParam)_createParamMethod.Make(type).Invoke(null, [id]);
+
+	/// <summary>
+	/// Get the parameter name.
+	/// </summary>
+	/// <param name="param"><see cref="IStrategyParam"/></param>
+	/// <returns>Display name.</returns>
+	public static string GetName(this IStrategyParam param)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam{T}"/>.
-		/// </summary>
-		/// <typeparam name="T">The type of the parameter value.</typeparam>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="initialValue">The initial value.</param>
-		/// <returns>The strategy parameter.</returns>
-		public static StrategyParam<T> Param<T>(this Strategy strategy, string name, T initialValue = default)
-		{
-			return new StrategyParam<T>(strategy, name, initialValue);
-		}
+		if (param is null)
+			throw new ArgumentNullException(nameof(param));
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam{T}"/>.
-		/// </summary>
-		/// <typeparam name="T">The type of the parameter value.</typeparam>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="id">Parameter identifier.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="initialValue">The initial value.</param>
-		/// <returns>The strategy parameter.</returns>
-		public static StrategyParam<T> Param<T>(this Strategy strategy, string id, string name, T initialValue = default)
-		{
-			return new StrategyParam<T>(strategy, id, name, initialValue);
-		}
-
-		/// <summary>
-		/// Fill optimization parameters.
-		/// </summary>
-		/// <typeparam name="T">The type of the parameter value.</typeparam>
-		/// <param name="param">The strategy parameter.</param>
-		/// <param name="optimizeFrom">The From value at optimization.</param>
-		/// <param name="optimizeTo">The To value at optimization.</param>
-		/// <param name="optimizeStep">The Increment value at optimization.</param>
-		/// <returns>The strategy parameter.</returns>
-		public static StrategyParam<T> Optimize<T>(this StrategyParam<T> param, T optimizeFrom = default, T optimizeTo = default, T optimizeStep = default)
-		{
-			if (param == null)
-				throw new ArgumentNullException(nameof(param));
-
-			param.OptimizeFrom = optimizeFrom;
-			param.OptimizeTo = optimizeTo;
-			param.OptimizeStep = optimizeStep;
-
-			return param;
-		}
-
-		/// <summary>
-		/// Check can optimize parameter.
-		/// </summary>
-		/// <param name="type">The type of the parameter value.</param>
-		/// <returns><see langword="true" />, if can optimize the parameter, otherwise, <see langword="false" />.</returns>
-		public static bool CanOptimize(this Type type)
-		{
-			if (type is null)
-				throw new ArgumentNullException(nameof(type));
-
-			return type.IsNumeric() && !type.IsEnum() || type == typeof(Unit);
-		}
+		return param.GetDisplayName().IsEmpty(param.Id);
 	}
 }

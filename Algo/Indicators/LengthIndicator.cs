@@ -1,95 +1,98 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: LengthIndicator.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// The base class for indicators with one resulting value and based on the period.
+/// </summary>
+/// <typeparam name="TResult">Result values type.</typeparam>
+public abstract class LengthIndicator<TResult> : BaseIndicator
 {
-	using System;
-	using System.Collections.Generic;
-	using System.ComponentModel;
-
-	using Ecng.Serialization;
-
-	using StockSharp.Localization;
+	/// <summary>
+	/// Initialize <see cref="LengthIndicator{T}"/>.
+	/// </summary>
+	protected LengthIndicator()
+	{
+		Buffer = new(Length);
+	}
 
 	/// <summary>
-	/// The base class for indicators with one resulting value and based on the period.
+	/// Gets the capacity of the buffer for data storage.
 	/// </summary>
-	/// <typeparam name="TResult">Result values type.</typeparam>
-	public abstract class LengthIndicator<TResult> : BaseIndicator
+	/// <returns>The capacity of the buffer. By default, it is equal to <see cref="Length"/>.</returns>
+	protected virtual int GetCapacity() => Length;
+
+	/// <inheritdoc />
+	public override void Reset()
 	{
-		/// <summary>
-		/// Initialize <see cref="LengthIndicator{T}"/>.
-		/// </summary>
-		protected LengthIndicator()
-		{
-			Buffer = new List<TResult>();
-		}
-
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			Buffer.Clear();
-			base.Reset();
-		}
-
-		private int _length = 1;
-
-		/// <summary>
-		/// Period length. By default equal to 1.
-		/// </summary>
-		[DisplayNameLoc(LocalizedStrings.Str736Key)]
-		[DescriptionLoc(LocalizedStrings.Str778Key, true)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public int Length
-		{
-			get => _length;
-			set
-			{
-				if (value < 1)
-					throw new ArgumentOutOfRangeException(nameof(value), value, LocalizedStrings.Str916);
-
-				_length = value;
-
-				Reset();
-			}
-		}
-
-		/// <inheritdoc />
-		public override bool IsFormed => Buffer.Count >= Length;
-
-		/// <summary>
-		/// The buffer for data storage.
-		/// </summary>
-		[Browsable(false)]
-		protected IList<TResult> Buffer { get; }
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			base.Load(storage);
-			Length = storage.GetValue<int>(nameof(Length));
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			base.Save(storage);
-			storage.SetValue(nameof(Length), Length);
-		}
-
-		/// <inheritdoc />
-		public override string ToString() => base.ToString() + " " + Length;
+		Buffer.Capacity = GetCapacity();
+		base.Reset();
 	}
+
+	/// <inheritdoc />
+	public override int NumValuesToInitialize => Length;
+
+	private int _length = 1;
+
+	/// <summary>
+	/// Period length. By default equal to 1.
+	/// </summary>
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.PeriodKey,
+		Description = LocalizedStrings.PeriodLengthKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public virtual int Length
+	{
+		get => _length;
+		set
+		{
+			if (value < 1)
+				throw new ArgumentOutOfRangeException(nameof(value), value, LocalizedStrings.InvalidValue);
+
+			_length = value;
+
+			Reset();
+		}
+	}
+
+	/// <inheritdoc />
+	protected override bool CalcIsFormed() => Buffer.Count >= Length;
+
+	/// <summary>
+	/// The buffer for data storage.
+	/// </summary>
+	[Browsable(false)]
+	protected CircularBufferEx<TResult> Buffer { get; }
+
+	/// <inheritdoc />
+	public override void Load(SettingsStorage storage)
+	{
+		base.Load(storage);
+		Length = storage.GetValue<int>(nameof(Length));
+	}
+
+	/// <inheritdoc />
+	public override void Save(SettingsStorage storage)
+	{
+		base.Save(storage);
+		storage.SetValue(nameof(Length), Length);
+	}
+
+	/// <inheritdoc />
+	protected override IIndicatorValue OnProcess(IIndicatorValue input)
+	{
+		var result = OnProcessDecimal(input);
+
+		return result is null ? new DecimalIndicatorValue(this, input.Time) : new DecimalIndicatorValue(this, result.Value, input.Time);
+	}
+
+	/// <summary>
+	/// To handle the input value.
+	/// </summary>
+	/// <param name="input">The input value.</param>
+	/// <returns>The new value of the indicator.</returns>
+	protected virtual decimal? OnProcessDecimal(IIndicatorValue input)
+		=> throw new NotSupportedException();
+
+	/// <inheritdoc />
+	public override string ToString() => base.ToString() + " " + Length;
 }

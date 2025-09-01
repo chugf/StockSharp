@@ -1,104 +1,102 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: Acceleration.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Acceleration / Deceleration Indicator.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/a_d.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.ADKey,
+	Description = LocalizedStrings.AccDecIndicatorKey)]
+[Doc("topics/api/indicators/list_of_indicators/a_d.html")]
+public class Acceleration : BaseIndicator
 {
-	using System;
-	using System.ComponentModel;
-
-	using Ecng.Serialization;
-
-	using StockSharp.Localization;
+	/// <summary>
+	/// Initializes a new instance of the <see cref="Acceleration"/>.
+	/// </summary>
+	public Acceleration()
+		: this(new AwesomeOscillator(), new SimpleMovingAverage { Length = 5 })
+	{
+	}
 
 	/// <summary>
-	/// Acceleration / Deceleration Indicator.
+	/// Initializes a new instance of the <see cref="Acceleration"/>.
 	/// </summary>
-	/// <remarks>
-	/// http://ta.mql4.com/indicators/bills/acceleration_deceleration.
-	/// </remarks>
-	[DisplayName("A/D")]
-	[DescriptionLoc(LocalizedStrings.Str835Key)]
-	public class Acceleration : BaseIndicator
+	/// <param name="ao">Awesome Oscillator.</param>
+	/// <param name="sma">The moving average.</param>
+	public Acceleration(AwesomeOscillator ao, SimpleMovingAverage sma)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="Acceleration"/>.
-		/// </summary>
-		public Acceleration()
-			: this(new AwesomeOscillator(), new SimpleMovingAverage { Length = 5 })
-		{
-		}
+		Ao = ao ?? throw new ArgumentNullException(nameof(ao));
+		Sma = sma ?? throw new ArgumentNullException(nameof(sma));
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="Acceleration"/>.
-		/// </summary>
-		/// <param name="ao">Awesome Oscillator.</param>
-		/// <param name="sma">The moving average.</param>
-		public Acceleration(AwesomeOscillator ao, SimpleMovingAverage sma)
-		{
-			Ao = ao ?? throw new ArgumentNullException(nameof(ao));
-			Sma = sma ?? throw new ArgumentNullException(nameof(sma));
-		}
-
-		/// <summary>
-		/// The moving average.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("MA")]
-		[DescriptionLoc(LocalizedStrings.Str731Key)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public SimpleMovingAverage Sma { get; }
-
-		/// <summary>
-		/// Awesome Oscillator.
-		/// </summary>
-		[TypeConverter(typeof(ExpandableObjectConverter))]
-		[DisplayName("AO")]
-		[DescriptionLoc(LocalizedStrings.Str836Key)]
-		[CategoryLoc(LocalizedStrings.GeneralKey)]
-		public AwesomeOscillator Ao { get; }
-
-		/// <inheritdoc />
-		public override bool IsFormed => Sma.IsFormed;
-
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			var aoValue = Ao.Process(input);
-
-			if (Ao.IsFormed)
-				return new DecimalIndicatorValue(this, aoValue.GetValue<decimal>() - Sma.Process(aoValue).GetValue<decimal>());
-
-			return new DecimalIndicatorValue(this, aoValue.GetValue<decimal>());
-		}
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			base.Load(storage);
-
-			Sma.LoadNotNull(storage, nameof(Sma));
-			Ao.LoadNotNull(storage, nameof(Ao));
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			base.Save(storage);
-
-			storage.SetValue(nameof(Sma), Sma.Save());
-			storage.SetValue(nameof(Ao), Ao.Save());
-		}
+		AddResetTracking(Ao);
+		AddResetTracking(Sma);
 	}
+
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.MinusOnePlusOne;
+
+	/// <summary>
+	/// The moving average.
+	/// </summary>
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.MAKey,
+		Description = LocalizedStrings.MovingAverageKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public SimpleMovingAverage Sma { get; }
+
+	/// <summary>
+	/// Awesome Oscillator.
+	/// </summary>
+	[TypeConverter(typeof(ExpandableObjectConverter))]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.AOKey,
+		Description = LocalizedStrings.AwesomeOscillatorKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public AwesomeOscillator Ao { get; }
+
+	/// <inheritdoc />
+	public override int NumValuesToInitialize => Ao.NumValuesToInitialize + Sma.NumValuesToInitialize - 1;
+
+	/// <inheritdoc />
+	protected override bool CalcIsFormed() => Sma.IsFormed;
+
+	/// <inheritdoc />
+	protected override IIndicatorValue OnProcess(IIndicatorValue input)
+	{
+		var aoValue = Ao.Process(input);
+
+		var aoDec = aoValue.ToDecimal();
+
+		if (Ao.IsFormed)
+			aoDec -= Sma.Process(aoValue).ToDecimal();
+
+		return new DecimalIndicatorValue(this, aoDec, input.Time);
+	}
+
+	/// <inheritdoc />
+	public override void Load(SettingsStorage storage)
+	{
+		base.Load(storage);
+
+		Sma.LoadIfNotNull(storage, nameof(Sma));
+		Ao.LoadIfNotNull(storage, nameof(Ao));
+	}
+
+	/// <inheritdoc />
+	public override void Save(SettingsStorage storage)
+	{
+		base.Save(storage);
+
+		storage.SetValue(nameof(Sma), Sma.Save());
+		storage.SetValue(nameof(Ao), Ao.Save());
+	}
+
+	/// <inheritdoc />
+	public override string ToString() => $"{base.ToString()}, Sma={Sma}, Ao={Ao}";
 }

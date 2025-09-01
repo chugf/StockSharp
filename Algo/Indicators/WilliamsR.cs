@@ -1,76 +1,62 @@
-﻿#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+﻿namespace StockSharp.Algo.Indicators;
 
-Project: StockSharp.Algo.Indicators.Algo
-File: WilliamsR.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Indicators
+/// <summary>
+/// Williams Percent Range.
+/// </summary>
+/// <remarks>
+/// https://doc.stocksharp.com/topics/api/indicators/list_of_indicators/%r.html
+/// </remarks>
+[Display(
+	ResourceType = typeof(LocalizedStrings),
+	Name = LocalizedStrings.WRKey,
+	Description = LocalizedStrings.WilliamsRKey)]
+[IndicatorIn(typeof(CandleIndicatorValue))]
+[Doc("topics/api/indicators/list_of_indicators/williams_r.html")]
+public class WilliamsR : LengthIndicator<decimal>
 {
-	using System.ComponentModel;
-
-	using StockSharp.Algo.Candles;
-	using StockSharp.Localization;
+	private readonly Lowest _low;
+	private readonly Highest _high;
 
 	/// <summary>
-	/// Williams Percent Range.
+	/// Initializes a new instance of the <see cref="WilliamsR"/>.
 	/// </summary>
-	/// <remarks>
-	/// %R = (Highest High - Close)/(Highest High - Lowest Low) * -100
-	/// http://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:williams_r
-	/// http://www2.wealth-lab.com/WL5Wiki/WilliamsR.ashx.
-	/// </remarks>
-	[DisplayName("%R")]
-	[DescriptionLoc(LocalizedStrings.Str854Key)]
-	[IndicatorIn(typeof(CandleIndicatorValue))]
-	public class WilliamsR : LengthIndicator<decimal>
+	public WilliamsR()
 	{
-		// Текущее значение минимума
-		private readonly Lowest _low;
+		_low = new();
+		_high = new();
 
-		// Текущее значение максимума
-		private readonly Highest _high;
+		Length = 5;
+	}
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="WilliamsR"/>.
-		/// </summary>
-		public WilliamsR()
-		{
-			_low = new Lowest();
-			_high = new Highest();
-		}
+	/// <inheritdoc />
+	public override IndicatorMeasures Measure => IndicatorMeasures.Percent;
 
-		/// <inheritdoc />
-		public override bool IsFormed => _low.IsFormed;
+	/// <inheritdoc />
+	public override int NumValuesToInitialize => _low.NumValuesToInitialize;
 
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			_high.Length = _low.Length = Length;
-			base.Reset();
-		}
+	/// <inheritdoc />
+	protected override bool CalcIsFormed() => _low.IsFormed;
 
-		/// <inheritdoc />
-		protected override IIndicatorValue OnProcess(IIndicatorValue input)
-		{
-			var candle = input.GetValue<Candle>();
+	/// <inheritdoc />
+	public override void Reset()
+	{
+		_high.Length = _low.Length = Length;
+		base.Reset();
+	}
 
-			// Находим минимум и максимум для заданного периода
-			var lowValue = _low.Process(input.SetValue(this, candle.LowPrice)).GetValue<decimal>();
-			var highValue = _high.Process(input.SetValue(this, candle.HighPrice)).GetValue<decimal>();
+	/// <inheritdoc />
+	protected override decimal? OnProcessDecimal(IIndicatorValue input)
+	{
+		var candle = input.ToCandle();
 
-			if ((highValue - lowValue) != 0)
-				return new DecimalIndicatorValue(this, -100m * (highValue - candle.ClosePrice) / (highValue - lowValue));
-				
-			return new DecimalIndicatorValue(this);
-		}
+		var lowValue = _low.Process(input, candle.LowPrice).ToDecimal();
+		var highValue = _high.Process(input, candle.HighPrice).ToDecimal();
+
+		var diff = highValue - lowValue;
+
+		if (diff != 0)
+			return -100m * (highValue - candle.ClosePrice) / diff;
+			
+		return null;
 	}
 }

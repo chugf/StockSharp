@@ -1,309 +1,409 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Strategies;
 
-Project: StockSharp.Algo.Strategies.Algo
-File: StrategyParam.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Strategies
+/// <summary>
+/// The strategy parameter.
+/// </summary>
+public interface IStrategyParam : IPersistable, INotifyPropertyChanged, IAttributesEntity
 {
-	using System;
-	using System.Collections;
-	using System.Collections.Generic;
-	using System.ComponentModel;
-
-	using Ecng.Common;
-	using Ecng.Collections;
-	using Ecng.Serialization;
-
-	using StockSharp.Localization;
-	using StockSharp.Messages;
+	/// <summary>
+	/// Parameter identifier.
+	/// </summary>
+	string Id { get; }
 
 	/// <summary>
-	/// The strategy parameter.
+	/// The type of the parameter value.
 	/// </summary>
-	public interface IStrategyParam : IPersistable
+	Type Type { get; }
+
+	/// <summary>
+	/// The parameter value.
+	/// </summary>
+	object Value { get; set; }
+
+	/// <summary>
+	/// Check can optimize parameter.
+	/// </summary>
+	bool CanOptimize { get; set; }
+
+	/// <summary>
+	/// The From value at optimization.
+	/// </summary>
+	object OptimizeFrom { get; set; }
+
+	/// <summary>
+	/// The To value at optimization.
+	/// </summary>
+	object OptimizeTo { get; set; }
+
+	/// <summary>
+	/// The Increment value at optimization.
+	/// </summary>
+	object OptimizeStep { get; set; }
+}
+
+/// <summary>
+/// Wrapper for typified access to the strategy parameter.
+/// </summary>
+/// <typeparam name="T">The type of the parameter value.</typeparam>
+public class StrategyParam<T> : NotifiableObject, IStrategyParam
+{
+	private readonly IEqualityComparer<T> _comparer;
+
+	/// <summary>
+	/// Initializes a new instance of the <see cref="StrategyParam{T}"/>.
+	/// </summary>
+	/// <param name="id">Parameter identifier.</param>
+	/// <param name="initialValue">The initial value.</param>
+	public StrategyParam(string id, T initialValue = default)
 	{
-		/// <summary>
-		/// Parameter identifier.
-		/// </summary>
-		string Id { get; }
+		if (id.IsEmpty())
+			throw new ArgumentNullException(nameof(id));
 
-		/// <summary>
-		/// Parameter name.
-		/// </summary>
-		string Name { get; }
+		Id = id;
+		_value = initialValue;
 
-		/// <summary>
-		/// The type of the parameter value.
-		/// </summary>
-		Type Type { get; }
+		CanOptimize = typeof(T).CanOptimize();
 
-		/// <summary>
-		/// The parameter value.
-		/// </summary>
-		object Value { get; set; }
+		_comparer = EqualityComparer<T>.Default;
+	}
 
-		/// <summary>
-		/// Check can optimize parameter.
-		/// </summary>
-		bool CanOptimize { get; }
+	/// <inheritdoc />
+	public string Id { get; private set; }
 
-		/// <summary>
-		/// The From value at optimization.
-		/// </summary>
-		object OptimizeFrom { get; set; }
+	private T _value;
 
-		/// <summary>
-		/// The To value at optimization.
-		/// </summary>
-		object OptimizeTo { get; set; }
+	/// <inheritdoc />
+	public T Value
+	{
+		get => _value;
+		set
+		{
+			if (_comparer.Equals(_value, value))
+				return;
 
-		/// <summary>
-		/// The Increment value at optimization.
-		/// </summary>
-		object OptimizeStep { get; set; }
+			if (!this.IsValid(value))
+				throw new ArgumentOutOfRangeException(nameof(value), value, LocalizedStrings.InvalidValue);
+
+			_value = value;
+			NotifyChanged();
+		}
+	}
+
+	Type IStrategyParam.Type => typeof(T);
+
+	object IStrategyParam.Value
+	{
+		get => Value;
+		set => Value = (T)value;
+	}
+
+	/// <inheritdoc />
+	public bool CanOptimize { get; set; }
+
+	/// <inheritdoc />
+	public object OptimizeFrom { get; set; }
+
+	/// <inheritdoc />
+	public object OptimizeTo { get; set; }
+
+	/// <inheritdoc />
+	public object OptimizeStep { get; set; }
+
+	/// <inheritdoc />
+	public IList<Attribute> Attributes { get; } = [];
+
+	/// <summary>
+	/// Fill optimization parameters.
+	/// </summary>
+	/// <param name="optimizeFrom">The From value at optimization.</param>
+	/// <param name="optimizeTo">The To value at optimization.</param>
+	/// <param name="optimizeStep">The Increment value at optimization.</param>
+	/// <returns>The strategy parameter.</returns>
+	public StrategyParam<T> SetOptimize(T optimizeFrom = default, T optimizeTo = default, T optimizeStep = default)
+	{
+		OptimizeFrom = optimizeFrom;
+		OptimizeTo = optimizeTo;
+		OptimizeStep = optimizeStep;
+
+		return this;
 	}
 
 	/// <summary>
-	/// Wrapper for typified access to the strategy parameter.
+	/// Set <see cref="StrategyParam{T}.CanOptimize"/> value.
 	/// </summary>
-	public class StrategyParam : IStrategyParam
+	/// <param name="canOptimize">The value of <see cref="StrategyParam{T}.CanOptimize"/>.</param>
+	/// <returns>The strategy parameter.</returns>
+	public StrategyParam<T> SetCanOptimize(bool canOptimize)
 	{
-		private readonly IEqualityComparer _comparer;
-		private readonly Strategy _strategy;
+		CanOptimize = canOptimize;
+		return this;
+	}
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="type">The type of the parameter value.</param>
-		public StrategyParam(Strategy strategy, string name, Type type)
-			: this(strategy, name, name, type)
+	/// <summary>
+	/// Set display settings.
+	/// </summary>
+	/// <param name="displayName">The display name.</param>
+	/// <param name="description">The description of the diagram element parameter.</param>
+	/// <param name="category">The category of the diagram element parameter.</param>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetDisplay(string displayName, string description, string category)
+		=> ModifyAttributes(true, () => new DisplayAttribute
 		{
-		}
+			Name = displayName,
+			Description = description,
+			GroupName = category,
+		});
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="id">Parameter identifier.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="type">The type of the parameter value.</param>
-		public StrategyParam(Strategy strategy, string id, string name, Type type)
-			: this(strategy, id, name, type, default)
+	/// <summary>
+	/// Set <see cref="BrowsableAttribute"/>.
+	/// </summary>
+	/// <param name="hidden">Is the parameter hidden in the editor.</param>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetHidden(bool hidden = true)
+		=> ModifyAttributes(hidden, () => new BrowsableAttribute(false));
+
+	/// <summary>
+	/// Set <see cref="BasicSettingAttribute"/>.
+	/// </summary>
+	/// <param name="basic">Value.</param>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetBasic(bool basic = true)
+		=> ModifyAttributes(basic, () => new BasicSettingAttribute());
+
+	/// <summary>
+	/// Set <see cref="ReadOnlyAttribute"/>.
+	/// </summary>
+	/// <param name="value">Value.</param>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetReadOnly(bool value = true)
+		=> ModifyAttributes(value, () => new ReadOnlyAttribute(true));
+
+	private static Type GetValueType()
+	{
+		var type = typeof(T);
+		return type.GetUnderlyingType() ?? type;
+	}
+
+	/// <summary>
+	/// Set greater than zero validator.
+	/// </summary>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetGreaterThanZero()
+	{
+		var type = GetValueType();
+
+		ValidationAttribute attr;
+
+		if (type == typeof(int))
+			attr = new IntGreaterThanZeroAttribute();
+		else if (type == typeof(long))
+			attr = new LongGreaterThanZeroAttribute();
+		else if (type == typeof(decimal))
+			attr = new DecimalGreaterThanZeroAttribute();
+		else if (type == typeof(double))
+			attr = new DoubleGreaterThanZeroAttribute();
+		else if (type == typeof(float))
+			attr = new FloatGreaterThanZeroAttribute();
+		else if (type == typeof(TimeSpan))
+			attr = new TimeSpanGreaterThanZeroAttribute();
+		else
+			throw new InvalidOperationException(type.Name);
+
+		return this.SetValidator(attr);
+	}
+
+	/// <summary>
+	/// Set <see langword="null"/> or more zero validator.
+	/// </summary>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetNullOrMoreZero()
+	{
+		var type = GetValueType();
+
+		ValidationAttribute attr;
+
+		if (type == typeof(int))
+			attr = new IntNullOrMoreZeroAttribute();
+		else if (type == typeof(long))
+			attr = new LongNullOrMoreZeroAttribute();
+		else if (type == typeof(decimal))
+			attr = new DecimalNullOrMoreZeroAttribute();
+		else if (type == typeof(double))
+			attr = new DoubleNullOrMoreZeroAttribute();
+		else if (type == typeof(float))
+			attr = new FloatNullOrMoreZeroAttribute();
+		else if (type == typeof(TimeSpan))
+			attr = new TimeSpanNullOrMoreZeroAttribute();
+		else
+			throw new InvalidOperationException(type.Name);
+
+		return this.SetValidator(attr);
+	}
+
+	/// <summary>
+	/// Set <see langword="null"/> or not negative validator.
+	/// </summary>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetNullOrNotNegative()
+	{
+		var type = GetValueType();
+
+		ValidationAttribute attr;
+
+		if (type == typeof(int))
+			attr = new IntNullOrNotNegativeAttribute();
+		else if (type == typeof(long))
+			attr = new LongNullOrNotNegativeAttribute();
+		else if (type == typeof(decimal))
+			attr = new DecimalNullOrNotNegativeAttribute();
+		else if (type == typeof(double))
+			attr = new DoubleNullOrNotNegativeAttribute();
+		else if (type == typeof(float))
+			attr = new FloatNullOrNotNegativeAttribute();
+		else if (type == typeof(TimeSpan))
+			attr = new TimeSpanNullOrNotNegativeAttribute();
+		else
+			throw new InvalidOperationException(type.Name);
+
+		return this.SetValidator(attr);
+	}
+
+	/// <summary>
+	/// Set not negative validator.
+	/// </summary>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetNotNegative()
+	{
+		var type = GetValueType();
+
+		ValidationAttribute attr;
+
+		if (type == typeof(int))
+			attr = new IntNotNegativeAttribute();
+		else if (type == typeof(long))
+			attr = new LongNotNegativeAttribute();
+		else if (type == typeof(decimal))
+			attr = new DecimalNotNegativeAttribute();
+		else if (type == typeof(double))
+			attr = new DoubleNotNegativeAttribute();
+		else if (type == typeof(float))
+			attr = new FloatNotNegativeAttribute();
+		else if (type == typeof(TimeSpan))
+			attr = new TimeSpanNotNegativeAttribute();
+		else
+			throw new InvalidOperationException(type.Name);
+
+		return this.SetValidator(attr);
+	}
+
+	/// <summary>
+	/// Set range validator.
+	/// </summary>
+	/// <param name="min">Minimum value.</param>
+	/// <param name="max">Maximum value.</param>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetRange(T min, T max)
+	{
+		var type = GetValueType();
+
+		RangeAttribute attr;
+
+		if (type == typeof(int))
+			attr = new(min.To<int>(), max.To<int>());
+		else
+			attr = new(type, min.To<string>(), max.To<string>());
+
+		return this.SetValidator(attr);
+	}
+
+	private StrategyParam<T> ModifyAttributes<TAttr>(bool add, Func<TAttr> create)
+		where TAttr : Attribute
+	{
+		Attributes.RemoveWhere(a => a is TAttr);
+
+		if (add)
+			Attributes.Add(create());
+
+		return this;
+	}
+
+	/// <summary>
+	/// Set required validator.
+	/// </summary>
+	/// <returns><see cref="StrategyParam{T}"/></returns>
+	public StrategyParam<T> SetRequired()
+	{
+		return Ecng.ComponentModel.Extensions.SetRequired(this);
+	}
+
+	/// <summary>
+	/// Load settings.
+	/// </summary>
+	/// <param name="storage">Settings storage.</param>
+	public void Load(SettingsStorage storage)
+	{
+		Id = storage.GetValue<string>(nameof(Id));
+
+		try
 		{
-		}
+			TValue getValue<TValue>()
+				=> storage.GetValue<TValue>(nameof(Value));
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="type">The type of the parameter value.</param>
-		/// <param name="initialValue">The initial value.</param>
-		public StrategyParam(Strategy strategy, string name, Type type, object initialValue)
-			: this(strategy, name, name, type, initialValue)
-		{
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="id">Parameter identifier.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="type">The type of the parameter value.</param>
-		/// <param name="initialValue">The initial value.</param>
-		public StrategyParam(Strategy strategy, string id, string name, Type type, object initialValue)
-		{
-			if (id.IsEmpty())
-				throw new ArgumentNullException(nameof(id));
-
-			if (name.IsEmpty())
-				throw new ArgumentNullException(nameof(name));
-
-			_strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-			Id = id;
-			Name = name;
-			Type = type ?? throw new ArgumentNullException(nameof(type));
-			_value = initialValue;
-
-			if (!_strategy.Parameters.TryAdd(id, this))
-				throw new ArgumentException(LocalizedStrings.CompositionAlreadyExistParams.Put(name, string.Empty), nameof(name));
-
-			CanOptimize = type.CanOptimize();
-			AllowNull = Type.IsNullable();
-
-			_comparer = (IEqualityComparer)typeof(EqualityComparer<>).Make(type).GetProperty(nameof(EqualityComparer<int>.Default)).GetValue(null);
-		}
-
-		/// <inheritdoc />
-		public string Id { get; private set; }
-
-		/// <inheritdoc />
-		public string Name { get; private set; }
-
-		/// <summary>
-		/// Is it possible to store in <see cref="Value"/> a value, equal to <see langword="null" />.
-		/// </summary>
-		public bool AllowNull { get; set; }
-
-		/// <inheritdoc />
-		public Type Type { get; }
-
-		private object _value;
-
-		/// <inheritdoc />
-		public object Value
-		{
-			get => _value;
-			set
+			if (typeof(T).Is<Security>())
 			{
-				if (value is null)
-				{
-					if (!AllowNull)
-						throw new ArgumentNullException(nameof(value));
-
-					if (_value is null)
-						return;
-				}
-				else
-				{
-					value = value.To(Type);
-
-					if (_comparer.Equals(_value, value))
-						return;
-				}
-
-				if (_value is INotifyPropertyChanged propChange)
-					propChange.PropertyChanged -= OnValueInnerStateChanged;
-
-				_value = value;
-				_strategy.RaiseParametersChanged(Name);
-
-				if (_value is INotifyPropertyChanged propChange2)
-					propChange2.PropertyChanged += OnValueInnerStateChanged;
+				var secId = getValue<string>();
+				if (!secId.IsEmpty())
+					Value = (ServicesRegistry.TrySecurityProvider?.LookupById(secId)).To<T>();
 			}
+			else if (typeof(T).Is<Portfolio>())
+			{
+				var pfName = getValue<string>();
+				if (!pfName.IsEmpty())
+					Value = (ServicesRegistry.TryPortfolioProvider?.LookupByPortfolioName(pfName)).To<T>();
+			}
+			else
+				Value = getValue<T>();
 		}
-
-		/// <inheritdoc />
-		public bool CanOptimize { get; set; }
-
-		/// <inheritdoc />
-		public object OptimizeFrom { get; set; }
-
-		/// <inheritdoc />
-		public object OptimizeTo { get; set; }
-
-		/// <inheritdoc />
-		public object OptimizeStep { get; set; }
-
-		private void OnValueInnerStateChanged(object sender, PropertyChangedEventArgs e)
+		catch (Exception ex)
 		{
-			_strategy.RaiseParametersChanged(Name);
+			ex.LogError();
 		}
 
-		/// <summary>
-		/// Load settings.
-		/// </summary>
-		/// <param name="storage">Settings storage.</param>
-		public void Load(SettingsStorage storage)
-		{
-			Id = storage.GetValue<string>(nameof(Id));
-			Name = storage.GetValue<string>(nameof(Name));
-			Value = storage.GetValue<object>(nameof(Value));
-			CanOptimize = storage.GetValue(nameof(CanOptimize), CanOptimize);
-			OptimizeFrom = storage.GetValue<object>(nameof(OptimizeFrom));
-			OptimizeTo = storage.GetValue<object>(nameof(OptimizeTo));
-			OptimizeStep = storage.GetValue<object>(nameof(OptimizeStep));
-		}
-
-		/// <summary>
-		/// Save settings.
-		/// </summary>
-		/// <param name="storage">Settings storage.</param>
-		public void Save(SettingsStorage storage)
-		{
-			storage.SetValue(nameof(Id), Id);
-			storage.SetValue(nameof(Name), Name);
-			storage.SetValue(nameof(Value), Value);
-			storage.SetValue(nameof(CanOptimize), CanOptimize);
-			storage.SetValue(nameof(OptimizeFrom), OptimizeFrom);
-			storage.SetValue(nameof(OptimizeTo), OptimizeTo);
-			storage.SetValue(nameof(OptimizeStep), OptimizeStep);
-		}
-
-		/// <inheritdoc />
-		public override string ToString() => Name;
+		CanOptimize = storage.GetValue(nameof(CanOptimize), CanOptimize);
+		OptimizeFrom = storage.GetValue<SettingsStorage>(nameof(OptimizeFrom))?.FromStorage();
+		OptimizeTo = storage.GetValue<SettingsStorage>(nameof(OptimizeTo))?.FromStorage();
+		OptimizeStep = storage.GetValue<SettingsStorage>(nameof(OptimizeStep))?.FromStorage();
 	}
 
 	/// <summary>
-	/// Wrapper for typified access to the strategy parameter.
+	/// Save settings.
 	/// </summary>
-	/// <typeparam name="T">The type of the parameter value.</typeparam>
-	public class StrategyParam<T> : StrategyParam
+	/// <param name="storage">Settings storage.</param>
+	public void Save(SettingsStorage storage)
 	{
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="name">Parameter name.</param>
-		public StrategyParam(Strategy strategy, string name)
-			: base(strategy, name, name, typeof(T))
+		object saveValue()
 		{
+			var v = Value;
+
+			return v switch
+			{
+				IPersistable ps => ps.Save(),
+				Security s => s.Id,
+				Portfolio pf => pf.Name,
+				_ => v
+			};
 		}
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="id">Parameter identifier.</param>
-		/// <param name="name">Parameter name.</param>
-		public StrategyParam(Strategy strategy, string id, string name)
-			: base(strategy, id, name, typeof(T), default)
-		{
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="initialValue">The initial value.</param>
-		public StrategyParam(Strategy strategy, string name, T initialValue)
-			: base(strategy, name, name, typeof(T), initialValue)
-		{
-		}
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="StrategyParam"/>.
-		/// </summary>
-		/// <param name="strategy">Strategy.</param>
-		/// <param name="id">Parameter identifier.</param>
-		/// <param name="name">Parameter name.</param>
-		/// <param name="initialValue">The initial value.</param>
-		public StrategyParam(Strategy strategy, string id, string name, T initialValue)
-			: base(strategy, id, name, typeof(T), initialValue)
-		{
-		}
-
-		/// <summary>
-		/// The parameter value.
-		/// </summary>
-		public new T Value
-		{
-			get => (T)base.Value;
-			set => base.Value = value;
-		}
+		storage
+			.Set(nameof(Id), Id)
+			.Set(nameof(Value), saveValue())
+			.Set(nameof(CanOptimize), CanOptimize)
+			.Set(nameof(OptimizeFrom), OptimizeFrom?.ToStorage())
+			.Set(nameof(OptimizeTo), OptimizeTo?.ToStorage())
+			.Set(nameof(OptimizeStep), OptimizeStep?.ToStorage())
+		;
 	}
+
+	/// <inheritdoc />
+	public override string ToString() => $"{this.GetName()}={Value}";
 }

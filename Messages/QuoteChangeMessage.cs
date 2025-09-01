@@ -1,199 +1,165 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Messages;
 
-Project: StockSharp.Messages.Messages
-File: QuoteChangeMessage.cs
-Created: 2015, 11, 11, 2:32 PM
-
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Messages
+/// <summary>
+/// Order book states.
+/// </summary>
+[DataContract]
+[Serializable]
+public enum QuoteChangeStates
 {
-	using System;
-	using System.Linq;
-	using System.ComponentModel;
-	using System.Runtime.Serialization;
-
-	using Ecng.Common;
-
-	using StockSharp.Localization;
+	/// <summary>
+	/// Snapshot started.
+	/// </summary>
+	[EnumMember]
+	SnapshotStarted,
 
 	/// <summary>
-	/// Order book states.
+	/// Snapshot building.
 	/// </summary>
-	[DataContract]
-	[Serializable]
-	public enum QuoteChangeStates
+	[EnumMember]
+	SnapshotBuilding,
+
+	/// <summary>
+	/// Snapshot complete.
+	/// </summary>
+	[EnumMember]
+	SnapshotComplete,
+
+	/// <summary>
+	/// Incremental.
+	/// </summary>
+	[EnumMember]
+	Increment,
+}
+
+/// <summary>
+/// Messages containing quotes.
+/// </summary>
+[DataContract]
+[Serializable]
+public sealed class QuoteChangeMessage : BaseSubscriptionIdMessage<QuoteChangeMessage>, IOrderBookMessage
+{
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.SecurityIdKey,
+		Description = LocalizedStrings.SecurityIdKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public SecurityId SecurityId { get; set; }
+
+	private QuoteChange[] _bids = [];
+
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.BidsKey,
+		Description = LocalizedStrings.QuotesBuyKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public QuoteChange[] Bids
 	{
-		/// <summary>
-		/// Snapshot started.
-		/// </summary>
-		[EnumMember]
-		SnapshotStarted,
-
-		/// <summary>
-		/// Snapshot building.
-		/// </summary>
-		[EnumMember]
-		SnapshotBuilding,
-
-		/// <summary>
-		/// Snapshot complete.
-		/// </summary>
-		[EnumMember]
-		SnapshotComplete,
-
-		/// <summary>
-		/// Incremental.
-		/// </summary>
-		[EnumMember]
-		Increment,
+		get => _bids;
+		set => _bids = value ?? throw new ArgumentNullException(nameof(value));
 	}
 
-	/// <summary>
-	/// Messages containing quotes.
-	/// </summary>
-	[DataContract]
-	[Serializable]
-	public sealed class QuoteChangeMessage : BaseSubscriptionIdMessage<QuoteChangeMessage>,
-		IServerTimeMessage, ISecurityIdMessage, IGeneratedMessage, ISeqNumMessage
+	private QuoteChange[] _asks = [];
+
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.AsksKey,
+		Description = LocalizedStrings.QuotesSellKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public QuoteChange[] Asks
 	{
-		/// <inheritdoc />
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.SecurityIdKey)]
-		[DescriptionLoc(LocalizedStrings.SecurityIdKey, true)]
-		[MainCategory]
-		public SecurityId SecurityId { get; set; }
+		get => _asks;
+		set => _asks = value ?? throw new ArgumentNullException(nameof(value));
+	}
 
-		private QuoteChange[] _bids = ArrayHelper.Empty<QuoteChange>();
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.ServerTimeKey,
+		Description = LocalizedStrings.ChangeServerTimeKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	public DateTimeOffset ServerTime { get; set; }
 
-		/// <summary>
-		/// Quotes to buy.
-		/// </summary>
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.Str281Key)]
-		[DescriptionLoc(LocalizedStrings.Str282Key)]
-		[MainCategory]
-		public QuoteChange[] Bids
-		{
-			get => _bids;
-			set => _bids = value ?? throw new ArgumentNullException(nameof(value));
-		}
+	/// <inheritdoc />
+	[DataMember]
+	public DataType BuildFrom { get; set; }
 
-		private QuoteChange[] _asks = ArrayHelper.Empty<QuoteChange>();
+	/// <summary>
+	/// The quote change contains filtered quotes.
+	/// </summary>
+	[Browsable(false)]
+	public bool IsFiltered { get; set; }
 
-		/// <summary>
-		/// Quotes to sell.
-		/// </summary>
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.Str283Key)]
-		[DescriptionLoc(LocalizedStrings.Str284Key)]
-		[MainCategory]
-		public QuoteChange[] Asks
-		{
-			get => _asks;
-			set => _asks = value ?? throw new ArgumentNullException(nameof(value));
-		}
+	/// <inheritdoc />
+	[DataMember]
+	[Display(
+		ResourceType = typeof(LocalizedStrings),
+		Name = LocalizedStrings.CurrencyKey,
+		Description = LocalizedStrings.CurrencyDescKey,
+		GroupName = LocalizedStrings.GeneralKey)]
+	//[Ecng.Serialization.Nullable]
+	public CurrencyTypes? Currency { get; set; }
 
-		/// <inheritdoc />
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.ServerTimeKey)]
-		[DescriptionLoc(LocalizedStrings.Str168Key)]
-		[MainCategory]
-		public DateTimeOffset ServerTime { get; set; }
+	/// <inheritdoc />
+	[DataMember]
+	public QuoteChangeStates? State { get; set; }
 
-		/// <summary>
-		/// Flag sorted by price quotes (<see cref="Bids"/> by descending, <see cref="Asks"/> by ascending).
-		/// </summary>
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.Str285Key)]
-		[DescriptionLoc(LocalizedStrings.Str285Key, true)]
-		[MainCategory]
-		public bool IsSorted { get; set; } = true;
+	/// <summary>
+	/// Determines a <see cref="QuoteChange.StartPosition"/> initialized.
+	/// </summary>
+	[DataMember]
+	public bool HasPositions { get; set; }
 
-		/// <inheritdoc />
-		[DataMember]
-		public DataType BuildFrom { get; set; }
+	/// <inheritdoc />
+	[DataMember]
+	public long SeqNum { get; set; }
 
-		/// <summary>
-		/// The quote change contains filtered quotes.
-		/// </summary>
-		[Browsable(false)]
-		public bool IsFiltered { get; set; }
+	/// <inheritdoc />
+	public override DataType DataType => DataType.MarketDepth;
 
-		/// <summary>
-		/// Trading security currency.
-		/// </summary>
-		[DataMember]
-		[DisplayNameLoc(LocalizedStrings.CurrencyKey)]
-		[DescriptionLoc(LocalizedStrings.Str382Key)]
-		[MainCategory]
-		[Ecng.Serialization.Nullable]
-		public CurrencyTypes? Currency { get; set; }
+	/// <summary>
+	/// Initializes a new instance of the <see cref="QuoteChangeMessage"/>.
+	/// </summary>
+	public QuoteChangeMessage()
+		: base(MessageTypes.QuoteChange)
+	{
+	}
 
-		/// <summary>
-		/// Order book state.
-		/// </summary>
-		[DataMember]
-		public QuoteChangeStates? State { get; set; }
+	/// <inheritdoc />
+	public override void CopyTo(QuoteChangeMessage destination)
+	{
+		base.CopyTo(destination);
 
-		/// <summary>
-		/// Determines a <see cref="QuoteChange.StartPosition"/> initialized.
-		/// </summary>
-		[DataMember]
-		public bool HasPositions { get; set; }
+		destination.SecurityId = SecurityId;
+		destination.Bids = [.. Bids];
+		destination.Asks = [.. Asks];
+		destination.ServerTime = ServerTime;
+		destination.Currency = Currency;
+		destination.BuildFrom = BuildFrom;
+		destination.IsFiltered = IsFiltered;
+		destination.State = State;
+		destination.HasPositions = HasPositions;
+		destination.SeqNum = SeqNum;
+	}
 
-		/// <inheritdoc />
-		[DataMember]
-		public long SeqNum { get; set; }
+	/// <inheritdoc />
+	public override string ToString()
+	{
+		var str = base.ToString() + $",Sec={SecurityId},T(S)={ServerTime:yyyy/MM/dd HH:mm:ss.fff},B={Bids.Length},A={Asks.Length}";
 
-		/// <inheritdoc />
-		public override DataType DataType => DataType.MarketDepth;
+		if (State != default)
+			str += $",State={State.Value}";
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="QuoteChangeMessage"/>.
-		/// </summary>
-		public QuoteChangeMessage()
-			: base(MessageTypes.QuoteChange)
-		{
-		}
+		if (SeqNum != default)
+			str += $",SQ={SeqNum}";
 
-		/// <inheritdoc />
-		public override void CopyTo(QuoteChangeMessage destination)
-		{
-			base.CopyTo(destination);
-
-			destination.SecurityId = SecurityId;
-			destination.Bids = Bids.ToArray();
-			destination.Asks = Asks.ToArray();
-			destination.ServerTime = ServerTime;
-			destination.IsSorted = IsSorted;
-			destination.Currency = Currency;
-			destination.BuildFrom = BuildFrom;
-			destination.IsFiltered = IsFiltered;
-			destination.State = State;
-			destination.HasPositions = HasPositions;
-			destination.SeqNum = SeqNum;
-		}
-
-		/// <inheritdoc />
-		public override string ToString()
-		{
-			var str = base.ToString() + $",Sec={SecurityId},T(S)={ServerTime:yyyy/MM/dd HH:mm:ss.fff},B={Bids.Length},A={Asks.Length}";
-
-			if (State != default)
-				str += $",State={State.Value}";
-
-			if (SeqNum != default)
-				str += $",SQ={SeqNum}";
-
-			return str;
-		}
+		return str;
 	}
 }

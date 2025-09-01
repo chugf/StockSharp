@@ -1,272 +1,97 @@
-#region S# License
-/******************************************************************************************
-NOTICE!!!  This program and source code is owned and licensed by
-StockSharp, LLC, www.stocksharp.com
-Viewing or use of this code requires your acceptance of the license
-agreement found at https://github.com/StockSharp/StockSharp/blob/master/LICENSE
-Removal of this comment is a violation of the license agreement.
+namespace StockSharp.Algo.Statistics;
 
-Project: StockSharp.Algo.Statistics.Algo
-File: ITradeStatisticParameter.cs
-Created: 2015, 11, 11, 2:32 PM
+using StockSharp.Algo.PnL;
 
-Copyright 2010 by StockSharp, LLC
-*******************************************************************************************/
-#endregion S# License
-namespace StockSharp.Algo.Statistics
+/// <summary>
+/// The interface, describing statistic parameter, calculated based on trade.
+/// </summary>
+public interface ITradeStatisticParameter : IStatisticParameter
 {
-	using System;
-
-	using Ecng.Serialization;
-
-	using StockSharp.Algo.PnL;
-	using StockSharp.Localization;
-
 	/// <summary>
-	/// The interface, describing statistic parameter, calculated based on trade.
+	/// To add information about new trade to the parameter.
 	/// </summary>
-	public interface ITradeStatisticParameter
+	/// <param name="info">Information on new trade.</param>
+	void Add(PnLInfo info);
+}
+
+/// <summary>
+/// Base class for calculating trade statistic parameters by aggregating trades over aligned time periods.
+/// </summary>
+/// <param name="type"><see cref="IStatisticParameter.Type"/></param>
+public abstract class PerPeriodBaseTradeParameter(StatisticParameterTypes type) : BaseStatisticParameter<decimal>(type), ITradeStatisticParameter
+{
+	private DateTime _currStart;
+	private int _currCount;
+
+	private int _periodsCount;
+
+	/// <inheritdoc />
+	public override void Reset()
 	{
-		/// <summary>
-		/// To add information about new trade to the parameter.
-		/// </summary>
-		/// <param name="info">Information on new trade.</param>
-		void Add(PnLInfo info);
+		_currStart = default;
+		_currCount = default;
+		_periodsCount = default;
+
+		base.Reset();
 	}
 
 	/// <summary>
-	/// Number of trades won (whose profit is greater than 0).
+	/// Align the specified date for exact period start.
 	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str983Key)]
-	[DescriptionLoc(LocalizedStrings.Str984Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class WinningTradesParameter : BaseStatisticParameter<int>, ITradeStatisticParameter
+	/// <param name="date">Trade date.</param>
+	/// <returns>Aligned value.</returns>
+	protected abstract DateTime Align(DateTime date);
+
+	/// <inheritdoc />
+	public void Add(PnLInfo info)
 	{
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
+		if (info is null)
+			throw new ArgumentNullException(nameof(info));
+
+		var date = Align(info.ServerTime.UtcDateTime);
+
+		if (_currStart == default)
 		{
-			if (info == null)
-				throw new ArgumentNullException(nameof(info));
+			_currStart = date;
 
-			if (info.PnL <= 0)
-				return;
+			_periodsCount = 1;
+			_currCount = 1;
 
-			Value++;
+			Value = _currCount;
+		}
+		else if (_currStart == date)
+		{
+			Value = ((Value * _periodsCount - _currCount) + ++_currCount) / _periodsCount;
+		}
+		else
+		{
+			_currStart = date;
+
+			_currCount = 1;
+
+			Value = (Value * _periodsCount + _currCount) / ++_periodsCount;
 		}
 	}
 
-	/// <summary>
-	/// Number of trades lost with zero profit (whose profit is less than or equal to 0).
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str986Key)]
-	[DescriptionLoc(LocalizedStrings.Str987Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class LossingTradesParameter : BaseStatisticParameter<int>, ITradeStatisticParameter
+	/// <inheritdoc />
+	public override void Save(SettingsStorage storage)
 	{
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			if (info == null)
-				throw new ArgumentNullException(nameof(info));
+		storage
+			.Set("CurrStart", _currStart)
+			.Set("PeriodsCount", _periodsCount)
+			.Set("CurrCount", _currCount)
+		;
 
-			if (info.ClosedVolume > 0 && info.PnL <= 0)
-				Value++;
-		}
+		base.Save(storage);
 	}
 
-	/// <summary>
-	/// Total number of trades.
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str988Key)]
-	[DescriptionLoc(LocalizedStrings.Str989Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class TradeCountParameter : BaseStatisticParameter<int>, ITradeStatisticParameter
+	/// <inheritdoc />
+	public override void Load(SettingsStorage storage)
 	{
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			Value++;
-		}
-	}
+		_currStart = storage.GetValue<DateTime>("CurrStart");
+		_periodsCount = storage.GetValue<int>("PeriodsCount");
+		_currCount = storage.GetValue<int>("CurrCount");
 
-	/// <summary>
-	/// Total number of closing trades.
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str990Key)]
-	[DescriptionLoc(LocalizedStrings.Str991Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class RoundtripCountParameter : BaseStatisticParameter<int>, ITradeStatisticParameter
-	{
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			if (info.ClosedVolume > 0)
-				Value++;
-		}
-	}
-
-	/// <summary>
-	/// Average trade profit.
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str992Key)]
-	[DescriptionLoc(LocalizedStrings.Str993Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class AverageTradeParameter : BaseStatisticParameter<decimal>, ITradeStatisticParameter
-	{
-		private decimal _sum;
-		private int _count;
-
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			_sum = 0;
-			_count = 0;
-			base.Reset();
-		}
-
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			if (info == null)
-				throw new ArgumentNullException(nameof(info));
-
-			if (info.ClosedVolume == 0)
-				return;
-
-			_sum += info.PnL;
-			_count++;
-
-			Value = _count > 0 ? _sum / _count : 0;
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			storage.SetValue("Sum", _sum);
-			storage.SetValue("Count", _count);
-
-			base.Save(storage);
-		}
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			_sum = storage.GetValue<decimal>("Sum");
-			_count = storage.GetValue<int>("Count");
-
-			base.Load(storage);
-		}
-	}
-
-	/// <summary>
-	/// Average winning trade.
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str994Key)]
-	[DescriptionLoc(LocalizedStrings.Str995Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class AverageWinTradeParameter : BaseStatisticParameter<decimal>, ITradeStatisticParameter
-	{
-		private decimal _sum;
-		private int _count;
-
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			_sum = 0;
-			_count = 0;
-			base.Reset();
-		}
-
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			if (info == null)
-				throw new ArgumentNullException(nameof(info));
-
-			if (info.ClosedVolume == 0)
-				return;
-
-			if (info.PnL > 0)
-			{
-				_sum += info.PnL;
-				_count++;
-			}
-
-			Value = _count > 0 ? _sum / _count : 0;
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			storage.SetValue("Sum", _sum);
-			storage.SetValue("Count", _count);
-
-			base.Save(storage);
-		}
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			_sum = storage.GetValue<decimal>("Sum");
-			_count = storage.GetValue<int>("Count");
-
-			base.Load(storage);
-		}
-	}
-
-	/// <summary>
-	/// Average losing trade.
-	/// </summary>
-	[DisplayNameLoc(LocalizedStrings.Str996Key)]
-	[DescriptionLoc(LocalizedStrings.Str997Key)]
-	[CategoryLoc(LocalizedStrings.Str985Key)]
-	public class AverageLossTradeParameter : BaseStatisticParameter<decimal>, ITradeStatisticParameter
-	{
-		private decimal _sum;
-		private int _count;
-
-		/// <inheritdoc />
-		public override void Reset()
-		{
-			_sum = 0;
-			_count = 0;
-			base.Reset();
-		}
-
-		/// <inheritdoc />
-		public void Add(PnLInfo info)
-		{
-			if (info == null)
-				throw new ArgumentNullException(nameof(info));
-
-			if (info.ClosedVolume == 0)
-				return;
-
-			if (info.PnL <= 0)
-			{
-				_sum += info.PnL;
-				_count++;
-			}
-
-			Value = _count > 0 ? _sum / _count : 0;
-		}
-
-		/// <inheritdoc />
-		public override void Save(SettingsStorage storage)
-		{
-			storage.SetValue("Sum", _sum);
-			storage.SetValue("Count", _count);
-
-			base.Save(storage);
-		}
-
-		/// <inheritdoc />
-		public override void Load(SettingsStorage storage)
-		{
-			_sum = storage.GetValue<decimal>("Sum");
-			_count = storage.GetValue<int>("Count");
-
-			base.Load(storage);
-		}
+		base.Load(storage);
 	}
 }
